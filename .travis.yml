@@ -22,8 +22,8 @@ matrix:
 env:
   matrix:
     - JULIA_NUM_THREADS=1
-    - JULIA_NUM_THREADS=4
-    - JULIA_NUM_THREADS=8
+    # - JULIA_NUM_THREADS=4
+    # - JULIA_NUM_THREADS=8
 ## uncomment and modify the following lines to manually install system packages
 #addons:
 #  apt: # apt-get for linux
