@@ -115,11 +115,9 @@ Base.setindex!(m::AbstractManager, args...) = Base.setindex!(manager(m), args...
 function Base.setindex!(m::Manager, v::T, e::Entity) where {T<:ComponentData}
 	entity_assert(m, e)
 	if !in(T, m)
-		c = component_type(T){T}()
-	else
-		c = m[T]
+		append!(m, [T])
 	end
-	return c[e] = v
+	return m[T][e] = v
 end
 
 function Base.setindex!(m::Manager, v, ::Type{T}, es::Vector{Entity}) where {T<:ComponentData}

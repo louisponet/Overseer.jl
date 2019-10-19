@@ -1,53 +1,59 @@
 using ECS
 
-@component struct Test1 end
-@component struct Test2 end
-@component struct Test3 end
-@component struct Test4 end
+abstract type TComp <: ComponentData end
 
-struct TestSys <: System end
+@component struct T1 <: TComp end
+@component struct T2 end
+@component struct T3 <: TComp end
+@component struct T4 end
 
-ECS.requested_components(::TestSys) = (Test1, Test2, Test3, Test4)
 
-function ECS.update(::TestSys, m::AbstractManager)
-    t1 = m[Test1]
-    t2 = m[Test2]
-    t3 = m[Test3]
-    t4 = m[Test4]
+struct TSys <: System end
+
+ECS.requested_components(::TSys) = (T1, T2, T3, T4)
+
+function ECS.update(::TSys, m::AbstractManager)
+    t1 = m[T1]
+    t2 = m[T2]
+    t3 = m[T3]
+    t4 = m[T4]
     for e in @entities_in(t1 && t2 && t3)
-        t4[e] = Test4()
+        t4[e] = T4()
     end
 end
 
-m = Manager(SystemStage(:default, [TestSys()]))
+m = Manager(SystemStage(:default, [TSys()]))
 
-Entity(m, Test1(), Test2())
-Entity(m, Test2(), Test3())
+Entity(m, T1(), T2())
+Entity(m, T2(), T3())
 for i = 1:10
-    Entity(m, Test1(), Test2(), Test3())
+    Entity(m, T1(), T2(), T3())
 end
 
 @test length(m.entities) == 12
 
-@test length(m[Test1]) == 11
+@test length(m[T1]) == 11
 
+@test m[T1, Entity(3)] == m[T1][Entity(3)]
 update_systems(m)
 
-@test length(m[Test4]) == 10
+@test length(m[T4]) == 10
+
+@test length(m[Entity(3)]) == 4
 
 delete!(m, Entity(4))
 
 @test length(m.free_entities) == 1
 @test length(filter(x->x==Entity(0), m.entities)) == 1
 
-@test length(m[Test4]) == 9
+@test length(m[T4]) == 9
 
 for i = 5:10
     schedule_delete!(m, Entity(i))
 end
 delete_scheduled!(m)
 
-@test length(m[Test4]) == 3
+@test length(m[T4]) == 3
 
 
 empty!(m)
@@ -55,21 +61,43 @@ empty!(m)
 @test isempty(m.system_stages)
 @test isempty(m.components)
 
-push!(m, SystemStage(:default, [TestSys()]))
+push!(m, SystemStage(:default, [TSys()]))
 
-@test length(m.components) == 4
+@test length(m.components) == 8
 
-struct TestSys2 <: System end
+struct TSys2 <: System end
 
-push!(m, :default, TestSys())
+push!(m, :default, TSys())
 
 @test length(last(system_stage(m, :default))) == 2
 
-insert!(m, :default, 1, TestSys2())
+insert!(m, :default, 1, TSys2())
 
-@test last(system_stage(m, :default))[1] == TestSys2()
+@test last(system_stage(m, :default))[1] == TSys2()
 
-insert!(m, 1, SystemStage(:test, [TestSys(), TestSys2()]))
+insert!(m, 1, SystemStage(:test, [TSys(), TSys2()]))
 
 @test first(m.system_stages[1]) == :test
+
+@test eltype(m[T4]) == T4
+
+struct SmallSys <: System end
+
+ECS.requested_components(::SmallSys) = (T1, T3)
+
+m2 = Manager(SystemStage(:default, [SmallSys()]))
+
+@test m2.components[2] === ECS.EMPTY_COMPONENT
+
+e = Entity(m2)
+m2[e] = T2()
+
+empty_entities!(m2)
+@test isempty(m2.entities)
+@test !isempty(m2.components)
+
+
+@test length(components(m2, TComp)) == 2
+
+
 
