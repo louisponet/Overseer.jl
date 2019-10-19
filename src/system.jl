@@ -6,6 +6,8 @@ const SystemStage = Pair{Symbol, Vector{System}}
 
 Base.push!(s::SystemStage, sys) = push!(last(s), sys)
 
+Base.insert!(s::SystemStage, i::Integer, sys) = insert!(last(s), i, sys)
+
 function requested_components(stage::SystemStage)
     comps = Type{<:ComponentData}[]
 	for s in last(stage)

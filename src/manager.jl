@@ -1,3 +1,5 @@
+#To implement AbstractManager interface, the subtype should just define the function manager
+#where all the fields are like in this one
 mutable struct Manager <: AbstractManager
 	entities     ::Vector{Entity}
 	free_entities::Vector{Entity}
@@ -47,43 +49,35 @@ function Manager(system_stages::SystemStage...)
 	return m
 end
 
-Base.map(f, s::Union{System, Manager}, T...) = f(map(x -> Base.getindex(s, x), T)...)
+manager(m::Manager)                                               = m
 
-manager(m::Manager) = m
-
-components(m::AbstractManager)     = manager(m).components
-entities(m::AbstractManager)       = manager(m).entities
-free_entities(m::AbstractManager)  = manager(m).free_entities
-to_delete(m::AbstractManager)  = manager(m).to_delete
-
-valid_entities(m::AbstractManager) = filter(x -> x.id != 0, entities(m))
-system_stages(m::AbstractManager)        = manager(m).system_stages
-
-system_stage(m::AbstractManager, s::Symbol)        = manager(m).system_stages[s]
-
+components(m::AbstractManager)                                    = manager(m).components
+entities(m::AbstractManager)                                      = manager(m).entities
+free_entities(m::AbstractManager)                                 = manager(m).free_entities
+to_delete(m::AbstractManager)                                     = manager(m).to_delete
+valid_entities(m::AbstractManager)                                = filter(x -> x.id != 0, entities(m))
+system_stages(m::AbstractManager)                                 = manager(m).system_stages
+system_stage(m::AbstractManager, s::Symbol)                       = manager(m).system_stages[s]
 singleton(m::AbstractManager, ::Type{T}) where {T<:ComponentData} = m[T][1]
 
-function components(manager::AbstractManager, ::Type{T}) where {T<:ComponentData}
-	comps = AbstractComponent[]
-	for c in components(manager)
-		if eltype(c) <: T
-			push!(comps, c)
-		end
-	end
-	return comps
-end
 
-function entity_assert(m::AbstractManager, e::Entity)
-	es = entities(m)
-	@assert length(es) >= e.id "$e was never initiated."
-	@assert es[e.id] != EMPTY_ENTITY "$e was removed previously."
+##### BASE Extensions ####
+Base.map(f, s::Union{System, Manager}, T...) = f(map(x -> Base.getindex(s, x), T)...)
+
+Base.in(::Type{R}, m::AbstractManager) where {R<:ComponentData} =
+	components(m)[component_id(R)] !== EMPTY_COMPONENT
+
+function Base.empty!(m::AbstractManager)
+	empty!(entities(m))
+	empty!(free_entities(m))
+	empty!(components(m))
+	empty!(system_stages(m))
 end
 
 function Base.getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData}
 	id = component_id(T)
 	return components(m)[id]::component_type(T){T}
 end
-
 function Base.getindex(m::AbstractManager, e::Entity)
 	entity_assert(m, e)		
 	data = ComponentData[]
@@ -94,7 +88,6 @@ function Base.getindex(m::AbstractManager, e::Entity)
 	end
 	return data
 end
-
 function Base.getindex(v::Vector{SystemStage}, s::Symbol)
     id = findfirst(x->first(x) == s, v)
     if id === nothing
@@ -102,15 +95,16 @@ function Base.getindex(v::Vector{SystemStage}, s::Symbol)
     end
     return v[id]
 end
-
 Base.getindex(m::AbstractManager, args...) = Base.getindex(manager(m), args...)
-Base.setindex!(m::AbstractManager, args...) = Base.setindex!(manager(m), args...)
+
 
 #TODO: Performance
 function Base.getindex(m::Manager, ::Type{T}, e::Entity) where {T<:ComponentData}
 	entity_assert(m, e)
 	return m[T][e]
 end
+
+Base.setindex!(m::AbstractManager, args...) = Base.setindex!(manager(m), args...)
 
 function Base.setindex!(m::Manager, v::T, e::Entity) where {T<:ComponentData}
 	entity_assert(m, e)
@@ -152,6 +146,12 @@ function Base.push!(m::AbstractManager, stage::SystemStage)
     push!(system_stages(m), stage)
 end
 
+function Base.insert!(m::AbstractManager, i::Integer, stage::SystemStage)
+    comps = requested_components(stage)
+    append!(m, comps)
+    insert!(system_stages(m), i, stage)
+end
+
 function Base.push!(m::AbstractManager, stage::Symbol, sys::System)
 	stage = system_stage(m, stage) 
     comps = requested_components(sys)
@@ -176,6 +176,30 @@ function Base.delete!(m::AbstractManager, e::Entity)
 	end
 end
 
+function empty_entities!(m::AbstractManager)
+	empty!(entities(m))
+	empty!(free_entities(m))
+	for c in components(m)
+    	empty!(c)
+	end
+end
+
+function components(manager::AbstractManager, ::Type{T}) where {T<:ComponentData}
+	comps = AbstractComponent[]
+	for c in components(manager)
+		if eltype(c) <: T
+			push!(comps, c)
+		end
+	end
+	return comps
+end
+
+function entity_assert(m::AbstractManager, e::Entity)
+	es = entities(m)
+	@assert length(es) >= e.id "$e was never initiated."
+	@assert es[e.id] != EMPTY_ENTITY "$e was removed previously."
+end
+
 function schedule_delete!(m::AbstractManager, e::Entity)
 	entity_assert(m, e)
 	push!(to_delete(m), e)
@@ -188,14 +212,6 @@ function delete_scheduled!(m::AbstractManager)
 	for e in to_delete(m)
 		entities(m)[e.id] = EMPTY_ENTITY
 		push!(free_entities(m), e)
-	end
-end
-
-function Base.empty!(m::AbstractManager)
-	empty!(entities(m))
-	empty!(free_entities(m))
-	for c in components(m)
-		empty!(c)
 	end
 end
 
@@ -213,9 +229,6 @@ end
 
 update_stage(m::AbstractManager, s::Symbol) = 
 	update_systems(system_stage(m, s), m)
-
-Base.in(::Type{R}, m::AbstractManager) where {R<:ComponentData} =
-	components(m)[component_id(R)] !== EMPTY_COMPONENT
 
 function prepare(m::AbstractManager)
 	for s in system_stages(m)

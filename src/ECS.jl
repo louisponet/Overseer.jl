@@ -19,6 +19,6 @@ module ECS
     export @component, @shared_component, @component_with_kw, @shared_component_with_kw
     export @entities_in
 
-    export update_systems, schedule_delete!, delete_scheduled!
+    export update_systems, schedule_delete!, delete_scheduled!, empty_entities!, system_stage
 
 end # module

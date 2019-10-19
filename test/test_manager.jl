@@ -49,3 +49,27 @@ delete_scheduled!(m)
 
 @test length(m[Test4]) == 3
 
+
+empty!(m)
+@test isempty(m.entities)
+@test isempty(m.system_stages)
+@test isempty(m.components)
+
+push!(m, SystemStage(:default, [TestSys()]))
+
+@test length(m.components) == 4
+
+struct TestSys2 <: System end
+
+push!(m, :default, TestSys())
+
+@test length(last(system_stage(m, :default))) == 2
+
+insert!(m, :default, 1, TestSys2())
+
+@test last(system_stage(m, :default))[1] == TestSys2()
+
+insert!(m, 1, SystemStage(:test, [TestSys(), TestSys2()]))
+
+@test first(m.system_stages[1]) == :test
+
