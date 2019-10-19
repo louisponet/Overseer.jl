@@ -68,8 +68,6 @@ singleton(m::AbstractManager, ::Type{T}) where {T<:ComponentData} = m[T][1]
 
 
 ##### BASE Extensions ####
-Base.map(f, s::Union{System, Manager}, T...) = f(map(x -> Base.getindex(s, x), T)...)
-
 Base.in(::Type{R}, m::AbstractManager) where {R<:ComponentData} =
 	components(m)[component_id(R)] !== EMPTY_COMPONENT
 
@@ -101,16 +99,6 @@ function Base.getindex(v::Vector{SystemStage}, s::Symbol)
     end
     return v[id]
 end
-Base.getindex(m::AbstractManager, args...) = Base.getindex(manager(m), args...)
-
-
-#TODO: Performance
-function Base.getindex(m::Manager, ::Type{T}, e::Entity) where {T<:ComponentData}
-	entity_assert(m, e)
-	return m[T][e]
-end
-
-Base.setindex!(m::AbstractManager, args...) = Base.setindex!(manager(m), args...)
 
 function Base.setindex!(m::Manager, v::T, e::Entity) where {T<:ComponentData}
 	entity_assert(m, e)

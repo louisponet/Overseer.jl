@@ -7,8 +7,13 @@ abstract type TComp <: ComponentData end
 @component struct T3 <: TComp end
 @component struct T4 end
 
-
 struct TSys <: System end
+
+function ECS.prepare(::TSys, m::AbstractManager)
+    if isempty(entities(m))
+        Entity(m, T4())
+    end
+end
 
 ECS.requested_components(::TSys) = (T1, T2, T3, T4)
 
@@ -30,21 +35,28 @@ for i = 1:10
     Entity(m, T1(), T2(), T3())
 end
 
-@test length(m.entities) == 12
+@test length(valid_entities(m)) == 12
 
 @test length(m[T1]) == 11
 
-@test m[T1, Entity(3)] == m[T1][Entity(3)]
 update_systems(m)
 
+@test length(m[T4]) == 10
+
+empty!(m[T4])
+update_stage(m, :default)
 @test length(m[T4]) == 10
 
 @test length(m[Entity(3)]) == 4
 
 delete!(m, Entity(4))
-
-@test length(m.free_entities) == 1
+@test !isempty(ECS.free_entities(m))
 @test length(filter(x->x==Entity(0), m.entities)) == 1
+
+Entity(m, T3())
+@test m[T3][Entity(4)] == T3() 
+@test isempty(ECS.free_entities(m))
+
 
 @test length(m[T4]) == 9
 
@@ -80,6 +92,11 @@ insert!(m, 1, SystemStage(:test, [TSys(), TSys2()]))
 @test first(m.system_stages[1]) == :test
 
 @test eltype(m[T4]) == T4
+
+prepare(m)
+@test !isempty(entities(m))
+@test singleton(m, T4) == T4()
+
 
 struct SmallSys <: System end
 
