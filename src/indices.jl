@@ -61,6 +61,24 @@ end
 
 Base.length(s::Indices) = length(s.packed)
 
+function Base.getindex(s::Indices, i::Integer)
+    pageid, offset = pageid_offset(s, i)
+
+    @boundscheck if pageid > length(s.reverse)
+        throw(BoundsError(s, i))
+    end
+    page = @inbounds s.reverse[pageid]
+
+    @boundscheck if page === NULL_INT_PAGE
+        throw(BoundsError(s, i))
+    end
+    id = @inbounds page[offset]
+    @boundscheck if id === 0
+        throw(BoundsError(s, i))
+    end
+    return id 
+end
+
 @inline function Base.push!(s::Indices, i::Integer)
     i <= 0 && throw(DomainError("Only positive Ints allowed."))
 
@@ -143,7 +161,7 @@ end
     id < 0 && throw(ArgumentError("Int to pop needs to be positive."))
     return in(id, s) ? (@inbounds pop!(s, id)) : default
 end
-popfirst!(s::Indices) = pop!(s, first(s))
+Base.popfirst!(s::Indices) = pop!(s, first(s))
 
 @inline Base.iterate(set::Indices, args...) = iterate(set.packed, args...)
 
@@ -220,11 +238,27 @@ Base.length(it::IndicesIterator) = it.len
 end
 
 macro indices_in(indices_expr)
-    expr, sets = expand_indices_bool(indices_expr)
+    expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
     return esc(quote
-        minlen, minid = findmin(map(length, $(Expr(:tuple, sets...))))
-        shortest = $(Expr(:tuple, sets...))[minid]
-        ECS.IndicesIterator(shortest, x -> $expr, minlen)
+        sets = $(Expr(:tuple, t_sets...))
+        orsets = $(Expr(:tuple, t_orsets...))
+
+        if isempty(sets)
+            minlen, minid = findmin(map(length, orsets))
+            t_shortest = orsets[minid]
+        else
+            minlen, minid = findmin(map(length, sets))
+            t_shortest = sets[minid]
+        end
+        if $(!isempty(t_orsets))
+            shortest = deepcopy(t_shortest)
+            for s in orsets
+                union!(shortest, s)
+            end
+        else
+            shortest = t_shortest
+        end
+        ECS.IndicesIterator(shortest, x -> $expr, length(shortest))
     end)
 end
 
@@ -233,24 +267,36 @@ function expand_indices_bool(expr)
         error("Can only expand expressions with ||, && and !")
     end
     sets = Symbol[]
+    orsets = Symbol[]
     if expr.args[1] == :!
         nothing
     elseif isa(expr.args[1], Symbol)
-        push!(sets, expr.args[1])
+        if expr.head != :|| 
+            push!(sets, expr.args[1])
+        else
+            push!(orsets, expr.args[1])
+        end
         expr.args[1] = Expr(:call, :in, :x, expr.args[1])
     else
-        expr_, sets_ = expand_indices_bool(expr.args[1])
+        expr_, sets_, orsets_ = expand_indices_bool(expr.args[1])
         append!(sets,  sets_)
+        append!(orsets,  orsets_)
     end
-
     if isa(expr.args[2], Symbol)
-        push!(sets, expr.args[2])
+        if expr.args[1] != :!
+            if expr.head != :|| 
+                push!(sets, expr.args[2])
+            else
+                push!(orsets, expr.args[2])
+            end
+        end
         expr.args[2] = Expr(:call, :in, :x, expr.args[2])
     else
-        expr_, sets_ = expand_indices_bool(expr.args[2])
+        expr_, sets_, orsets_ = expand_indices_bool(expr.args[2])
         append!(sets, sets_)
+        append!(orsets, orsets_)
     end
-    return expr, sets
+    return expr, sets, orsets
 end
 
 
