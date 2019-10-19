@@ -28,7 +28,7 @@ function Manager(comps::Vector{Union{Component, SharedComponent}})
 end
 
 function Manager(cs::AbstractComponent...)
-	maxid = maximum(map(x->component_id(eltype(x)), cs))
+	maxid = length(COMPONENTDATA_TYPES)
 
 	comps = Vector{Union{Component, SharedComponent}}(undef, maxid)
 	for c in cs
@@ -68,8 +68,10 @@ singleton(m::AbstractManager, ::Type{T}) where {T<:ComponentData} = m[T][1]
 
 
 ##### BASE Extensions ####
-Base.in(::Type{R}, m::AbstractManager) where {R<:ComponentData} =
-	components(m)[component_id(R)] !== EMPTY_COMPONENT
+function Base.in(::Type{R}, m::AbstractManager) where {R<:ComponentData}
+    cid = component_id(R)
+    return cid <= length(components(m)) && components(m)[cid] !== EMPTY_COMPONENT
+end
 
 function Base.empty!(m::AbstractManager)
 	empty!(entities(m))
@@ -100,7 +102,7 @@ function Base.getindex(v::Vector{SystemStage}, s::Symbol)
     return v[id]
 end
 
-function Base.setindex!(m::Manager, v::T, e::Entity) where {T<:ComponentData}
+function Base.setindex!(m::AbstractManager, v::T, e::Entity) where {T<:ComponentData}
 	entity_assert(m, e)
 	if !in(T, m)
 		append!(m, [T])
@@ -108,7 +110,7 @@ function Base.setindex!(m::Manager, v::T, e::Entity) where {T<:ComponentData}
 	return m[T][e] = v
 end
 
-function Base.setindex!(m::Manager, v, ::Type{T}, es::Vector{Entity}) where {T<:ComponentData}
+function Base.setindex!(m::AbstractManager, v, ::Type{T}, es::Vector{Entity}) where {T<:ComponentData}
 	comp = m[T]
 	for e in es
 		entity_assert(m, e)

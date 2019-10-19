@@ -66,6 +66,12 @@ for e in @entities_in((c1 || c3) && !c2)
 end
 @test t == 27
 
+t = 0
+for e in @entities_in(c1)
+    global t += e.id
+end
+@test t == sum(2:2:10)
+
 @test pop!(c1, Entity(10)) == Test1()
 
 @test length(c1) == length(entities1) - 1

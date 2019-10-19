@@ -168,11 +168,11 @@ end
 @testset "indices_in" begin
     a = Indices(2:2:10)
     b = Indices(10:3:20)
-    c = Indices(3:10)
+    c = [Indices(3:10)]
 
     d = Indices(1)
     t = 0
-    for e in @indices_in(((a && c) || d) && !b)
+    for e in @indices_in(((a && c[1]) || d) && !b)
         t+=e
     end
     @test t == 4+6+8+1

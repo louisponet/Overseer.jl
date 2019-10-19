@@ -132,6 +132,9 @@ end
 #                                      #
 ########################################
 
+Base.iterate(c::Component, args...) = iterate(c.data, args...)
+Base.iterate(c::SharedComponent, args...) = iterate(c.shared_data, args...)
+
 struct EntityIterator{T<:IndicesIterator}
     it::T
 end

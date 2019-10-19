@@ -22,5 +22,9 @@ function Entity(m::AbstractManager, datas::ComponentData...)
 	return e
 end
 
+function Entity(c::AbstractComponent, i::Integer)
+    return Entity(c.indices.packed[i])
+end
+
 const EMPTY_ENTITY = Entity(0)
 
