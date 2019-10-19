@@ -1,5 +1,11 @@
 #To implement AbstractManager interface, the subtype should just define the function manager
 #where all the fields are like in this one
+
+"""
+    Basic Manager. This takes care of creating and destroying entities,
+    making sure all the requested components for the systems are initialized,
+    and updates the systems.
+"""
 mutable struct Manager <: AbstractManager
 	entities     ::Vector{Entity}
 	free_entities::Vector{Entity}

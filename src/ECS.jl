@@ -7,6 +7,11 @@ module ECS
 
     abstract type System end
 
+    """
+        Abstract type for all entity, component and system managers. In order to use the interface,
+        make sure that every subtype of AbstractManager has an overload for the function `manager` that
+        points towards the fields needed for functionality (see manager.jl for more info)
+    """
     abstract type AbstractManager end
 
     include("indices.jl")
