@@ -1,4 +1,4 @@
-#ECS (Entity Component System)
+# ECS (Entity Component System)
 [![Build Status](https://travis-ci.org/louisponet/ECS.jl.svg?branch=master)](https://travis-ci.org/louisponet/ECS.jl)
 [![Coverage Status](https://coveralls.io/repos/github/louisponet/ECS.jl/badge.svg?branch=master)](https://coveralls.io/github/louisponet/ECS.jl?branch=master)
 
@@ -20,8 +20,8 @@ Each `ComponentData` should be purely a store for data, with no more logic attac
 
 ### System & SystemStage
 This where all the logic should take place. Each system should be an empty struct [(except for maybe holding settings info)](https://github.com/louisponet/Glimpse.jl/blob/43d9e0d6f116343324b4a083d3cb80943225ac4e/src/systems/rendering/depthpeeling.jl#L18) that subtypes `System` and overloads 2 functions:
-    - `ECS.update(::System, m::AbstractManager)`
-    - `ECS.requested_components(::System)`
+- `ECS.update(::System, m::AbstractManager)`
+- `ECS.requested_components(::System)`
 
 The first one will be used to perform each update, i.e. perform the system's main logic, while the latter is used when the system is added to an `AbstractManager` to make sure that all `Component`s that the system cares for are present.
 
