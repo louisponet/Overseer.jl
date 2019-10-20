@@ -35,19 +35,19 @@ for i = 1:10
     Entity(m, T1(), T2(), T3())
 end
 
-@test length(valid_entities(m)) == 12
+@test length(valid_entities(m)) == 13
 
 @test length(m[T1]) == 11
 
-update_systems(m)
+update(m)
 
-@test length(m[T4]) == 10
+@test length(m[T4]) == 11
 
 empty!(m[T4])
-update_stage(m, :default)
+update(system_stage(m, :default), m)
 @test length(m[T4]) == 10
 
-@test length(m[Entity(3)]) == 4
+@test length(m[Entity(4)]) == 4
 
 delete!(m, Entity(4))
 @test !isempty(ECS.free_entities(m))

@@ -42,7 +42,6 @@ function Manager(cs::AbstractComponent...)
 	return Manager(comps)
 end
 
-# Manager(cs::AbstractComponent...) = Manager(Entity[], Entity[], Dict([eltype(x) => x for x in cs]), System[])
 Manager(components::Type{<:ComponentData}...) = Manager(map(x -> component_type(x){x}(), components)...)
 
 function Manager(system_stages::SystemStage...)
@@ -52,6 +51,7 @@ function Manager(system_stages::SystemStage...)
 	end
 	m = Manager(comps...)
 	m.system_stages=[system_stages...]
+	prepare(m)
 	return m
 end
 
@@ -138,12 +138,14 @@ function Base.push!(m::AbstractManager, stage::SystemStage)
     comps = requested_components(stage)
     append!(m, comps)
     push!(system_stages(m), stage)
+    prepare(stage, m)
 end
 
 function Base.insert!(m::AbstractManager, i::Integer, stage::SystemStage)
     comps = requested_components(stage)
     append!(m, comps)
     insert!(system_stages(m), i, stage)
+    prepare(stage, m)
 end
 
 function Base.push!(m::AbstractManager, stage::Symbol, sys::System)
@@ -151,12 +153,14 @@ function Base.push!(m::AbstractManager, stage::Symbol, sys::System)
     comps = requested_components(sys)
     append!(m, comps)
 	push!(stage, sys)
+    prepare(sys, m)
 end
 
 function Base.insert!(m::AbstractManager, stage::Symbol, i::Int, sys::System)
 	insert!(system_stage(m, stage), i, sys)
     comps = requested_components(sys)
     append!(m, comps)
+    prepare(sys, m)
 end
 
 function Base.delete!(m::AbstractManager, e::Entity)
@@ -209,20 +213,17 @@ function delete_scheduled!(m::AbstractManager)
 	end
 end
 
-function update_systems(s::SystemStage, m::AbstractManager)
+function update(s::SystemStage, m::AbstractManager)
     for s in last(s)
         update(s, m)
     end
 end
 
-function update_systems(m::AbstractManager)
+function update(m::AbstractManager)
 	for stage in system_stages(m)
-		update_systems(stage, m)
+		update(stage, m)
 	end
 end
-
-update_stage(m::AbstractManager, s::Symbol) = 
-	update_systems(system_stage(m, s), m)
 
 function prepare(m::AbstractManager)
 	for s in system_stages(m)
