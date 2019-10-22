@@ -53,14 +53,14 @@ function Base.delete!(c::AbstractComponent, es::Vector{Entity})
     end
 end
 
-Base.getindex(c::Component, e::Entity) = c.data[c.indices[e.id]]
-Base.getindex(c::SharedComponent, e::Entity) = c.shared[c.data[c.indices[e.id]]]
-Base.getindex(c::Component, i::Integer) = c.data[i]
-Base.getindex(c::SharedComponent, i::Integer) = c.shared[i]
+Base.@propagate_inbounds @inline Base.getindex(c::Component, e::Entity) = c.data[c.indices[e.id]]
+Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, e::Entity) = c.shared[c.data[c.indices[e.id]]]
+Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
+Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) = c.shared[i]
 
-function Base.setindex!(c::Component{T}, v::T, e::Entity) where {T}
+@inline function Base.setindex!(c::Component{T}, v::T, e::Entity) where {T}
     eid = e.id
-    if !in(e, c)
+    @boundscheck if !in(e, c)
         push!(c.indices, eid)
         push!(c.data, v)
     else
@@ -68,11 +68,11 @@ function Base.setindex!(c::Component{T}, v::T, e::Entity) where {T}
     end
     return v
 end
-function Base.setindex!(c::SharedComponent{T}, v::T, e::Entity) where {T}
+@inline function Base.setindex!(c::SharedComponent{T}, v::T, e::Entity) where {T}
     eid = e.id
     t_shared_id = findfirst(x -> x==v, c.shared)
     shared_id = t_shared_id === nothing ? (push!(c.shared, v); length(c.shared)) : t_shared_id
-    if !in(e, c)
+    @boundscheck if !in(e, c)
         push!(c.indices, eid)
         push!(c.data, shared_id)
     else
@@ -131,7 +131,7 @@ end
 #            Iteration                 #
 #                                      #
 ########################################
-struct EntityIterator{T<:IndicesIterator}
+struct EntityIterator{T<:Union{IndicesIterator,Indices}}
     it::T
 end
 
@@ -145,28 +145,32 @@ end
 
 macro entities_in(indices_expr)
     expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
-    return esc(quote
-        t_comps = $(Expr(:tuple, t_sets...))
-        t_or_comps = $(Expr(:tuple, t_orsets...))
-        sets = map(x -> x.indices, t_comps)
-        orsets = map(x -> x.indices, t_or_comps)
-        if isempty(sets)
-            minlen, minid = findmin(map(length, orsets))
-            t_shortest = orsets[minid]
-        else
-            minlen, minid = findmin(map(length, sets))
-            t_shortest = sets[minid]
-        end
-        if $(!isempty(t_orsets))
-            shortest = deepcopy(t_shortest)
-            for s in orsets
-                union!(shortest, s)
+    if length(t_sets) == 1 && isempty(t_orsets)
+        return esc(:(ECS.EntityIterator($(t_sets[1]).indices)))
+    else
+        return esc(quote
+            t_comps = $(Expr(:tuple, t_sets...))
+            t_or_comps = $(Expr(:tuple, t_orsets...))
+            sets = map(x -> x.indices, t_comps)
+            orsets = map(x -> x.indices, t_or_comps)
+            if isempty(sets)
+                minlen, minid = findmin(map(length, orsets))
+                t_shortest = orsets[minid]
+            else
+                minlen, minid = findmin(map(length, sets))
+                t_shortest = sets[minid]
             end
-        else
-            shortest = t_shortest
-        end
-        ECS.EntityIterator(ECS.IndicesIterator(shortest, x -> $expr, length(shortest)))
-    end)
+            if $(!isempty(t_orsets))
+                shortest = deepcopy(t_shortest)
+                for s in orsets
+                    union!(shortest, s)
+                end
+            else
+                shortest = t_shortest
+            end
+            ECS.EntityIterator(ECS.IndicesIterator(shortest, x -> $expr, length(shortest)))
+        end)
+    end
 end
 
 ########################################

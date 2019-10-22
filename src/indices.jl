@@ -49,7 +49,7 @@ function pageid_offset(s::Indices, i)
     return pageid, (i - 1) & (INT_PER_PAGE - 1) + 1
 end
 
-function Base.in(i, s::Indices)
+@inline function Base.in(i, s::Indices)
     pageid, offset = pageid_offset(s, i)
     if pageid > length(s.reverse)
         return false
@@ -61,7 +61,7 @@ end
 
 Base.length(s::Indices) = length(s.packed)
 
-function Base.getindex(s::Indices, i::Integer)
+@inline function Base.getindex(s::Indices, i::Integer)
     pageid, offset = pageid_offset(s, i)
 
     @boundscheck if pageid > length(s.reverse)

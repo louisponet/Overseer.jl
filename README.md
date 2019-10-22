@@ -70,7 +70,7 @@ function ECS.update(::Oscillator, m::AbstractManager)
 		e_spat  = spatial[e]
 		spr     = spring[e]
 		v_prev  = e_spat.velocity 
-		new_v   = v_prev - (e_spat.position - spr.center) * spr.k - v_prev * spr.damping
+		new_v   = v_prev - (e_spat.position - spr.center) * spr.spring_constant
 		spatial[e] = Spatial(e_spat.position, new_v)
 	end
 end
@@ -85,7 +85,7 @@ function ECS.update(::Rotator, dio::AbstractManager)
 	for e in @entities_in(rotation && spatial) 
     	e_rotation = rotation[e]
     	e_spatial  = spatial[e]
-		n          = erotation.axis
+		n          = e_rotation.axis
 		r          = - e_rotation.center + e_spatial.position
 		theta      = e_rotation.omega * dt
 		nnd        = n * dot(n, r)
