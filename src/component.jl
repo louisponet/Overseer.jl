@@ -5,7 +5,7 @@ component_type(::Type{<:ComponentData}) = Component
 # component arrays that lack the components for a particular index.
 struct Stub <: ComponentData end
 
-
+indices_iterator(a::AbstractComponent) = a.indices
 """
 The most basic Component type.
 
@@ -125,13 +125,62 @@ function Base.pop!(c::SharedComponent, e::Entity)
     return val
 end
 
+@inline Base.iterate(c::Component, args...) = iterate(c.data, args...)
+@inline Base.iterate(c::SharedComponent, args...) = iterate(c.shared, args...)
+
+function ensure_entity_id!(c::AbstractComponent, e::Entity, id::Int)
+    indices = c.indices
+    @inbounds packed_id = indices[e.id]
+    if packed_id != id
+        set_packed_id!(indices, e.id, id)
+        c.data[id], c.data[packed_id] = c.data[packed_id], c.data[id]
+    end
+end
+
+struct Group
+    component_ids::NTuple
+    indices::Indices
+    len::Int
+end
+
+function Group(cs)
+    l, id = findmin(map(length, cs))
+    shortest = cs[id]
+    entity_dataid_map = Pair{Entity, Int}[]
+    counter = 0
+    for (i, e) in enumerate(EntityIterator(shortest.indices))
+        if all(x -> in(e, x), cs)
+            counter += 1
+            push!(entity_dataid_map, e => counter)
+        end
+    end
+    for (e, datid) in entity_dataid_map
+        for c in cs
+            ensure_entity_id!(c, e, datid)
+        end
+    end
+    return Group(map(x -> component_id(eltype(x)), cs), cs[1].indices, counter)
+end
+
+Base.length(g::Group) = g.len
+@inline indices_iterator(g::Group) = g
+@inline indices(g::Group) = g.indices
+
+function Base.iterate(g::Group, state=1)
+    if state > length(g)
+        return nothing
+    end
+    return @inbounds g.indices.packed[state], state+1
+end
+
+@inline Base.in(c::Int, g::Group) = c ∈ g.component_ids
 
 ########################################
 #                                      #
 #            Iteration                 #
 #                                      #
 ########################################
-struct EntityIterator{T<:Union{IndicesIterator,Indices}}
+struct EntityIterator{T<:Union{IndicesIterator,Indices,Group}}
     it::T
 end
 
@@ -146,13 +195,13 @@ end
 macro entities_in(indices_expr)
     expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
     if length(t_sets) == 1 && isempty(t_orsets)
-        return esc(:(ECS.EntityIterator($(t_sets[1]).indices)))
+        return esc(:(ECS.EntityIterator(ECS.indices_iterator($(t_sets[1])))))
     else
         return esc(quote
             t_comps = $(Expr(:tuple, t_sets...))
             t_or_comps = $(Expr(:tuple, t_orsets...))
-            sets = map(x -> x.indices, t_comps)
-            orsets = map(x -> x.indices, t_or_comps)
+            sets = map(ECS.indices_iterator, t_comps)
+            orsets = map(ECS.indices_iterator, t_or_comps)
             if isempty(sets)
                 minlen, minid = findmin(map(length, orsets))
                 t_shortest = orsets[minid]
@@ -263,7 +312,4 @@ function _shared_component(typedef, mod::Module, args...)
     	end
 	end
 end
-
-
-
 

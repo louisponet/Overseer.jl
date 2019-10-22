@@ -11,6 +11,7 @@ mutable struct Manager <: AbstractManager
 	free_entities::Vector{Entity}
 	to_delete    ::Vector{Entity}
 	components   ::Vector{Union{Component,SharedComponent}}
+	groups       ::Vector{Group}
 	# components   ::Dict{DataType, Union{Component,SharedComponent}}
 
 	system_stages::Vector{SystemStage}
@@ -19,6 +20,7 @@ Manager() = Manager(Entity[],
                     Entity[],
                     Entity[],
                     Union{Component,SharedComponent}[],
+                    Group[],
                     Pair{Symbol, Vector{System}}[])
 
 function Manager(comps::Vector{Union{Component, SharedComponent}})
@@ -65,7 +67,7 @@ valid_entities(m::AbstractManager)                                = filter(x -> 
 system_stages(m::AbstractManager)                                 = manager(m).system_stages
 system_stage(m::AbstractManager, s::Symbol)                       = manager(m).system_stages[s]
 singleton(m::AbstractManager, ::Type{T}) where {T<:ComponentData} = m[T][1]
-
+groups(m::AbstractManager) = manager(m).groups
 
 ##### BASE Extensions ####
 function Base.in(::Type{R}, m::AbstractManager) where {R<:ComponentData}
@@ -230,3 +232,40 @@ function prepare(m::AbstractManager)
 		prepare(s, m)
 	end
 end
+
+function create_group!(m::AbstractManager,  cs::Type{<:ComponentData}...)
+    comps = map(x -> m[x], cs)
+    for (ic, c) in enumerate(comps)
+        if any(x -> c in x, groups(m))
+            error("$(cs[ic]) is already inside a group.")
+        end
+    end
+    g = Group(comps)
+    push!(groups(m), g)
+    return g
+end
+
+@inline function group_id(m::AbstractManager, cs)
+    id = findfirst(g -> all(x -> component_id(x) in g, cs), groups(m))
+    if id === nothing
+        error("No group with components $cs found.")
+    end
+    return id
+end
+
+@inline function group(m::AbstractManager, cs::Type{<:ComponentData}...)
+    return groups(m)[group_id(m, cs)]
+end
+
+@inline function regroup!(m::AbstractManager, cs::Type{<:ComponentData}...)
+    gid = group_id(m, cs)
+    groups(m)[gid] = Group(map(x->m[x], cs))
+end
+
+@inline function regroup!(m::AbstractManager)
+    for (i, g) in enumerate(groups(m))
+        groups(m)[i] = Group(map(x->components(m)[x], g.component_ids)) 
+    end
+    return groups(m)
+end
+

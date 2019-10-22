@@ -219,18 +219,20 @@ end
 
 Base.collect(s::Indices) = copy(s.packed)
 
-struct IndicesIterator{T<:Function}
-    shortest::Indices
+struct IndicesIterator{I, T<:Function}
+    shortest::I
     test::T
     len::Int
 end
 
 Base.length(it::IndicesIterator) = it.len
 
+@inline indices(i::Indices) = i
+
 @inline function Base.iterate(it::IndicesIterator, state=1)
     it_length = length(it)
     for i=state:it_length
-        id = it.shortest.packed[i]
+        id = indices(it.shortest).packed[i]
         if it.test(id)
             return id, i+1
         end
@@ -304,21 +306,17 @@ function expand_indices_bool(expr)
     return expr, sets, orsets
 end
 
+#This is assuming that it's all inbounds
+function set_packed_id!(ids::Indices, reverse_id::Int, new_packed_id::Int)
+    @inbounds begin
+        from_pageid, from_offset = pageid_offset(ids, reverse_id)
+        from_packed_id = ids.reverse[from_pageid][from_offset]
+        ids.reverse[from_pageid][from_offset] = new_packed_id
 
+        to_pageid, to_offset = pageid_offset(ids, ids.packed[new_packed_id])
+        ids.reverse[to_pageid][to_offset] = from_packed_id
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        ids.packed[from_packed_id], ids.packed[new_packed_id] =
+            ids.packed[new_packed_id], ids.packed[from_packed_id]
+    end
+end

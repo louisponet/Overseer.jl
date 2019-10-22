@@ -116,5 +116,39 @@ empty_entities!(m2)
 
 @test length(components(m2, TComp)) == 2
 
+empty!(m)
+Entity(m, Test1(), Test2(0))
+Entity(m, Test2(), Test3())
+for i = 2:10
+    Entity(m, Test1(), Test2())
+    Entity(m, Test1(), Test2(i), Test3(i))
+end
+
+before = sum(map(x->x.p, m[Test2]))
+tg = create_group!(m, Test2, Test3)
+
+@test sum(map(x->x.p, m[Test2])) == before
+@test length(tg) == 10
+@test tg.indices.packed[1] == 2
+@test tg.indices[2] == 1
+@test m[Test2].data[1] == Test2()
+@test m[Test2].data[2] == Test2(2)
+@test m[Test2].data[3] == Test2(3)
+@test m[Test3].shared[m[Test3].data[1]] == Test3()
+@test m[Test3].shared[m[Test3].data[2]] == Test3(2)
+@test m[Test3].shared[m[Test3].data[3]] == Test3(3)
+
+@test group(m, Test2, Test3) == tg
+
+pop!(m[Test2], Entity(2))
+regroup!(m)
+@test length(group(m, Test2, Test3)) == 9
+
+pop!(m[Test2], Entity(4))
+regroup!(m, Test2, Test3)
+
+@test length(group(m, Test2, Test3)) == 8
+
+
 
 
