@@ -63,9 +63,9 @@ Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) =
     @boundscheck if !in(e, c)
         push!(c.indices, eid)
         push!(c.data, v)
-    else
-        @inbounds c.data[c.indices[eid]] = v
+        return v
     end
+    @inbounds c.data[c.indices[eid]] = v
     return v
 end
 @inline function Base.setindex!(c::SharedComponent{T}, v::T, e::Entity) where {T}
@@ -75,9 +75,9 @@ end
     @boundscheck if !in(e, c)
         push!(c.indices, eid)
         push!(c.data, shared_id)
-    else
-        @inbounds c.data[c.indices[eid]] = shared_id
+        return v
     end
+    @inbounds c.data[c.indices[eid]] = shared_id
     return v
 end
 
@@ -194,7 +194,7 @@ end
 
 macro entities_in(indices_expr)
     expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
-    if length(t_sets) == 1 && isempty(t_orsets)
+    if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
         return esc(:(ECS.EntityIterator(ECS.indices_iterator($(t_sets[1])))))
     else
         return esc(quote
