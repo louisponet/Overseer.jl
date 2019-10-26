@@ -44,6 +44,8 @@ function Base.copy!(to::Indices, from::Indices)
     return to
 end
 
+Base.lastindex(s::Indices) = s.packed[end]
+
 function pageid_offset(s::Indices, i)
     pageid = div(i - 1, INT_PER_PAGE) + 1
     return pageid, (i - 1) & (INT_PER_PAGE - 1) + 1

@@ -124,8 +124,19 @@ for i = 2:10
     Entity(m, Test1(), Test2(i), Test3(i))
 end
 
+ung = create_group!(m, Test1, Test2; ordered=false)
+ung_before = m[Test2][Entity(ung.indices[end])]
+ung_before_len = length(ung)
+
 before = sum(map(x->x.p, m[Test2]))
+
+test2_1 = m[Test2].data[2]
+unordered_g = create_group!(m, Test2, Test3; ordered=false)
+@test test2_1 == Test2() == m[Test2].data[2]
+
 tg = create_group!(m, Test2, Test3)
+@test length(groups(m)) == 2
+
 
 @test sum(map(x->x.p, m[Test2])) == before
 @test length(tg) == 10
@@ -138,14 +149,22 @@ tg = create_group!(m, Test2, Test3)
 @test m[Test3].shared[m[Test3].data[2]] == Test3(2)
 @test m[Test3].shared[m[Test3].data[3]] == Test3(3)
 
+@test create_group!(m, Test2, Test3) === tg
+@test_throws ArgumentError tg = create_group!(m, Test1, Test2)
+
+@test m[Test2][Entity(ung.indices[end])] == ung_before
+
+
 @test group(m, Test2, Test3) == tg
 
-pop!(m[Test2], Entity(2))
+pop!(m[Test2], Entity(4))
 regroup!(m)
 @test length(group(m, Test2, Test3)) == 9
+@test length(group(m, Test1, Test2)) == ung_before_len - 1
 
-pop!(m[Test2], Entity(4))
+pop!(m[Test2], Entity(2))
 regroup!(m, Test2, Test3)
+@test length(group(m, Test1, Test2)) == ung_before_len - 1
 
 @test length(group(m, Test2, Test3)) == 8
 
