@@ -155,7 +155,8 @@ abstract type AbstractGroup end
 
 @inline indices(g::AbstractGroup) = g.indices
 
-@inline Base.in(c::Int, g::AbstractGroup) = c ∈ g.component_ids
+@inline Base.in(c::Int, g::AbstractGroup) = c ∈ g.indices
+@inline Base.in(c::Type{<:ComponentData}, g::AbstractGroup) = component_id(c) ∈ g.component_ids 
 
 function Base.iterate(g::AbstractGroup, state=1)
     if state > length(g)

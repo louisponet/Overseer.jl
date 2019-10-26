@@ -233,22 +233,20 @@ function prepare(m::AbstractManager)
 	end
 end
 
-function create_group!(m::AbstractManager,  cs::Type{<:ComponentData}...; ordered=true)
+function create_group!(m::AbstractManager,  cs::Type{<:ComponentData}...; ordered=false)
     comps = map(x -> m[x], cs)
-    cids  = map(component_id, cs)
 
     any_in = false
     for g in Iterators.filter(x -> x isa OrderedGroup, groups(m))
-        if all(in(g), cids)
+        if all(in(g), cs)
             return g
-        elseif any(in(g), cids)
+        elseif any(in(g), cs)
             any_in = true
         end
     end
     if ordered
         any_in && throw(ArgumentError("An ordered group with at least one of the components $cs already exists.\nA component can not be in different ordered groups."))
-        # @show findfirst(g -> all(in(g), cids) && g isa BasicGroup, groups(m))
-        basic_id = findfirst(g -> all(in(g), cids) && g isa BasicGroup, groups(m))
+        basic_id = findfirst(g -> all(in(g), cs) && g isa BasicGroup, groups(m))
         basic_id !== nothing && deleteat!(groups(m), basic_id)
 
         push!(groups(m), OrderedGroup(comps))
@@ -259,7 +257,7 @@ function create_group!(m::AbstractManager,  cs::Type{<:ComponentData}...; ordere
 end
 
 @inline function group_id(m::AbstractManager, cs)
-    id = findfirst(g -> all(x -> component_id(x) in g, cs), groups(m))
+    id = findfirst(g -> all(in(g), cs), groups(m))
     if id === nothing
         error("No group with components $cs found.")
     end

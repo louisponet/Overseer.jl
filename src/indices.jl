@@ -267,12 +267,12 @@ macro indices_in(indices_expr)
 end
 
 function expand_indices_bool(expr)
-    if expr isa Symbol || expr.head == :ref
+    if expr isa Symbol || expr.head == :ref || (expr.head == :call && expr.args[1] != :!)
         return Expr(:call, :in, :x, expr), [expr], Symbol[]
     end
-    if !in(expr.head, (:||, :&&)) && !(expr.head == :call && expr.args[1] == :!)
-        error("Can only expand expressions with ||, && and !")
-    end
+    # if !in(expr.head, (:||, :&&)) && !(expr.head == :call && expr.args[1] in == :!)
+    #     error("Can only expand expressions with ||, && and !")
+    # end
     sets = Union{Symbol, Expr}[]
     orsets = Union{Symbol, Expr}[]
     if expr.args[1] == :!
