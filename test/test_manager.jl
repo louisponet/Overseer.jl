@@ -124,8 +124,19 @@ for i = 2:10
     Entity(m, Test1(), Test2(i), Test3(i))
 end
 
+ung = create_group!(m, Test1, Test2; ordered=false)
+ung_before = m[Test2][Entity(ung.indices[end])]
+ung_before_len = length(ung)
+
 before = sum(map(x->x.p, m[Test2]))
-tg = create_group!(m, Test2, Test3)
+
+test2_1 = m[Test2].data[2]
+unordered_g = create_group!(m, Test2, Test3; ordered=false)
+@test test2_1 == Test2() == m[Test2].data[2]
+
+tg = create_group!(m, Test2, Test3;ordered=true)
+@test length(groups(m)) == 2
+
 
 @test sum(map(x->x.p, m[Test2])) == before
 @test length(tg) == 10
@@ -138,17 +149,55 @@ tg = create_group!(m, Test2, Test3)
 @test m[Test3].shared[m[Test3].data[2]] == Test3(2)
 @test m[Test3].shared[m[Test3].data[3]] == Test3(3)
 
+@test create_group!(m, Test2, Test3;ordered=true) === tg
+@test_throws ArgumentError tg = create_group!(m, Test1, Test2;ordered=true)
+
+@test m[Test2][Entity(ung.indices[end])] == ung_before
+
+
 @test group(m, Test2, Test3) == tg
 
-pop!(m[Test2], Entity(2))
+pop!(m[Test2], Entity(4))
 regroup!(m)
 @test length(group(m, Test2, Test3)) == 9
+@test length(group(m, Test1, Test2)) == ung_before_len - 1
 
-pop!(m[Test2], Entity(4))
+pop!(m[Test2], Entity(2))
 regroup!(m, Test2, Test3)
+@test length(group(m, Test1, Test2)) == ung_before_len - 1
 
 @test length(group(m, Test2, Test3)) == 8
 
+tot = 0
+for e in @entities_in(group(m, Test1, Test2))
+    global tot += 1
+end
+@test tot == ung_before_len - 1 == length(group(m, Test1, Test2))
+
+tot = 0
+for e in @entities_in(group(m, Test2, Test3))
+    global tot += 1
+end
+@test tot == 8 == length(group(m, Test2, Test3))
+
+tot = 0
+for e in @entities_in(group(m, Test2, Test3) && group(m, Test1, Test2))
+    global tot += 1
+end
+
+tot2 = 0
+for e in @entities_in(m[Test1] && m[Test2] && m[Test3])
+    global tot2 += 1
+end
+@test tot == tot2
+
+remove_groups!(m, Test2, Test3)
+@test length(groups(m)) == 1
+
+tg = create_group!(m, Test1, Test2; ordered=true)
+@test length(groups(m)) == 1
+
+@test groups(m)[1] isa ECS.OrderedGroup
 
 
 

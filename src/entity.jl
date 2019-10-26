@@ -27,4 +27,3 @@ function Entity(c::AbstractComponent, i::Integer)
 end
 
 const EMPTY_ENTITY = Entity(0)
-

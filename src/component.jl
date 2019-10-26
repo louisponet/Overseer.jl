@@ -128,59 +128,81 @@ end
 @inline Base.iterate(c::Component, args...) = iterate(c.data, args...)
 @inline Base.iterate(c::SharedComponent, args...) = iterate(c.shared, args...)
 
-function ensure_entity_id!(c::AbstractComponent, e::Entity, id::Int)
+function ensure_entity_id!(c::AbstractComponent, e::Int, id::Int)
     indices = c.indices
-    @inbounds packed_id = indices[e.id]
+    @inbounds packed_id = indices[e]
     if packed_id != id
-        set_packed_id!(indices, e.id, id)
+        set_packed_id!(indices, e, id)
         c.data[id], c.data[packed_id] = c.data[packed_id], c.data[id]
     end
 end
 
-struct Group
-    component_ids::NTuple
-    indices::Indices
-    len::Int
-end
-
-function Group(cs)
+function shared_entity_ids(cs)
     l, id = findmin(map(length, cs))
     shortest = cs[id]
-    entity_dataid_map = Pair{Entity, Int}[]
-    counter = 0
-    for (i, e) in enumerate(EntityIterator(shortest.indices))
-        if all(x -> in(e, x), cs)
-            counter += 1
-            push!(entity_dataid_map, e => counter)
+    shared_entity_ids = Int[]
+    for (i, e) in enumerate(shortest.indices)
+        if all(x -> in(e, x.indices), cs)
+            push!(shared_entity_ids, e)
         end
     end
-    for (e, datid) in entity_dataid_map
-        for c in cs
-            ensure_entity_id!(c, e, datid)
-        end
-    end
-    return Group(map(x -> component_id(eltype(x)), cs), cs[1].indices, counter)
+    return shared_entity_ids
 end
 
-Base.length(g::Group) = g.len
-@inline indices_iterator(g::Group) = g
-@inline indices(g::Group) = g.indices
 
-function Base.iterate(g::Group, state=1)
+"Forms groups of components." 
+abstract type AbstractGroup end
+
+@inline indices(g::AbstractGroup) = g.indices
+
+@inline Base.in(c::Int, g::AbstractGroup) = c ∈ g.indices
+@inline Base.in(c::Type{<:ComponentData}, g::AbstractGroup) = component_id(c) ∈ g.component_ids 
+
+function Base.iterate(g::AbstractGroup, state=1)
     if state > length(g)
         return nothing
     end
     return @inbounds g.indices.packed[state], state+1
 end
 
-@inline Base.in(c::Int, g::Group) = c ∈ g.component_ids
+@inline indices_iterator(g::AbstractGroup) = g
+
+"Groups components, creating a vector of the shared entity ids."
+struct BasicGroup <: AbstractGroup
+    component_ids::NTuple
+    indices::Indices
+end
+
+BasicGroup(cs) = BasicGroup(map(x -> component_id(eltype(x)), cs), Indices(shared_entity_ids(cs)))
+
+Base.length(bg::BasicGroup) = length(bg.indices)
+
+"Groups components, and makes sure that the order of entities is the same in each of the components."
+mutable struct OrderedGroup <: AbstractGroup
+    component_ids::NTuple
+    indices::Indices
+    len::Int
+end
+
+function OrderedGroup(cs)
+    valid_entities = shared_entity_ids(cs)
+    for (datid, e) in enumerate(valid_entities)
+        for c in cs
+            ensure_entity_id!(c, e, datid)
+        end
+    end
+    return OrderedGroup(map(x -> component_id(eltype(x)), cs), cs[1].indices, length(valid_entities))
+end
+
+Base.length(g::OrderedGroup) = g.len
+
 
 ########################################
 #                                      #
 #            Iteration                 #
 #                                      #
 ########################################
-struct EntityIterator{T<:Union{IndicesIterator,Indices,Group}}
+struct EntityIterator{T<:Union{IndicesIterator,Indices,AbstractGroup}}
     it::T
 end
 

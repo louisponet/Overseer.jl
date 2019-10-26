@@ -14,6 +14,7 @@ module ECS
     """
     abstract type AbstractManager end
 
+    include("utils.jl")
     include("indices.jl")
     include("entity.jl")
     include("component.jl")
@@ -25,6 +26,6 @@ module ECS
     export @entities_in
 
     export update, schedule_delete!, delete_scheduled!, empty_entities!, system_stage, components, entities, system_stages
-    export prepare, singleton, valid_entities, groups, group, create_group!, regroup!
+    export prepare, singleton, valid_entities, groups, group, create_group!, regroup!, remove_groups!
 
 end # module

@@ -11,7 +11,7 @@ mutable struct Manager <: AbstractManager
 	free_entities::Vector{Entity}
 	to_delete    ::Vector{Entity}
 	components   ::Vector{Union{Component,SharedComponent}}
-	groups       ::Vector{Group}
+	groups       ::Vector{AbstractGroup}
 	# components   ::Dict{DataType, Union{Component,SharedComponent}}
 
 	system_stages::Vector{SystemStage}
@@ -20,7 +20,7 @@ Manager() = Manager(Entity[],
                     Entity[],
                     Entity[],
                     Union{Component,SharedComponent}[],
-                    Group[],
+                    AbstractGroup[],
                     Pair{Symbol, Vector{System}}[])
 
 function Manager(comps::Vector{Union{Component, SharedComponent}})
@@ -233,20 +233,31 @@ function prepare(m::AbstractManager)
 	end
 end
 
-function create_group!(m::AbstractManager,  cs::Type{<:ComponentData}...)
+function create_group!(m::AbstractManager,  cs::Type{<:ComponentData}...; ordered=false)
     comps = map(x -> m[x], cs)
-    for (ic, c) in enumerate(comps)
-        if any(x -> c in x, groups(m))
-            error("$(cs[ic]) is already inside a group.")
+
+    any_in = false
+    for g in Iterators.filter(x -> x isa OrderedGroup, groups(m))
+        if all(in(g), cs)
+            return g
+        elseif any(in(g), cs)
+            any_in = true
         end
     end
-    g = Group(comps)
-    push!(groups(m), g)
-    return g
+    if ordered
+        any_in && throw(ArgumentError("An ordered group with at least one of the components $cs already exists.\nA component can not be in different ordered groups."))
+        basic_id = findfirst(g -> all(in(g), cs) && g isa BasicGroup, groups(m))
+        basic_id !== nothing && deleteat!(groups(m), basic_id)
+
+        push!(groups(m), OrderedGroup(comps))
+    else
+        push!(groups(m), BasicGroup(comps))
+    end
+    return groups(m)[end]
 end
 
 @inline function group_id(m::AbstractManager, cs)
-    id = findfirst(g -> all(x -> component_id(x) in g, cs), groups(m))
+    id = findfirst(g -> all(in(g), cs), groups(m))
     if id === nothing
         error("No group with components $cs found.")
     end
@@ -259,13 +270,20 @@ end
 
 @inline function regroup!(m::AbstractManager, cs::Type{<:ComponentData}...)
     gid = group_id(m, cs)
-    groups(m)[gid] = Group(map(x->m[x], cs))
+    gt = typeof(groups(m)[gid])
+    groups(m)[gid] = gt(map(x->m[x], cs))
 end
 
 @inline function regroup!(m::AbstractManager)
     for (i, g) in enumerate(groups(m))
-        groups(m)[i] = Group(map(x->components(m)[x], g.component_ids)) 
+        groups(m)[i] = typeof(g)(map(x->components(m)[x], g.component_ids)) 
     end
     return groups(m)
 end
 
+function remove_groups!(m::AbstractManager, cs::Type{<:ComponentData}...)
+    ids = findall(x -> all(in(x), cs), groups(m))
+    if ids !== nothing
+        deleteat!(groups(m), ids)
+    end
+end
