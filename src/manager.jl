@@ -78,8 +78,10 @@ end
 function Base.empty!(m::AbstractManager)
 	empty!(entities(m))
 	empty!(free_entities(m))
+	empty!(to_delete(m))
 	empty!(components(m))
 	empty!(system_stages(m))
+	empty!(groups(m))
 end
 
 function Base.getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData}
@@ -238,17 +240,18 @@ function create_group!(m::AbstractManager,  cs::Type{<:ComponentData}...; ordere
 
     any_in = false
     for g in Iterators.filter(x -> x isa OrderedGroup, groups(m))
-        if all(in(g), cs)
+        if all(in(g), cs) && length(g.component_ids) == length(cs)
             return g
         elseif any(in(g), cs)
-            any_in = true
+            any_in = !all(in(g), cs)
         end
     end
     if ordered
-        any_in && throw(ArgumentError("An ordered group with at least one of the components $cs already exists.\nA component can not be in different ordered groups."))
-        basic_id = findfirst(g -> all(in(g), cs) && g isa BasicGroup, groups(m))
+        any_in && throw(ArgumentError("An ordered group with at least one but not all of the components $cs already exists.\nAn ordered component group can only be a subgroup of a previously ordered group."))
+        basic_id = findfirst(g -> all(in(g), cs) && length(g.component_ids) == length(cs), groups(m))
         basic_id !== nothing && deleteat!(groups(m), basic_id)
 
+        # if a superset of the requested entities is already ordered, only the remaining entities will be  ordered
         push!(groups(m), OrderedGroup(comps))
     else
         push!(groups(m), BasicGroup(comps))
@@ -257,7 +260,7 @@ function create_group!(m::AbstractManager,  cs::Type{<:ComponentData}...; ordere
 end
 
 @inline function group_id(m::AbstractManager, cs)
-    id = findfirst(g -> all(in(g), cs), groups(m))
+    id = findfirst(g -> all(in(g), cs) && length(g.component_ids) == length(cs), groups(m))
     if id === nothing
         error("No group with components $cs found.")
     end

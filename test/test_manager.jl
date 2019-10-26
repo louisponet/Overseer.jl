@@ -123,7 +123,6 @@ for i = 2:10
     Entity(m, Test1(), Test2())
     Entity(m, Test1(), Test2(i), Test3(i))
 end
-
 ung = create_group!(m, Test1, Test2; ordered=false)
 ung_before = m[Test2][Entity(ung.indices[end])]
 ung_before_len = length(ung)
@@ -134,20 +133,23 @@ test2_1 = m[Test2].data[2]
 unordered_g = create_group!(m, Test2, Test3; ordered=false)
 @test test2_1 == Test2() == m[Test2].data[2]
 
-tg = create_group!(m, Test2, Test3;ordered=true)
-@test length(groups(m)) == 2
+tg1 = create_group!(m, Test1, Test2, Test3;ordered=true)
+@test length(groups(m)) == 3
+
+tg = create_group!(m, Test2, Test3; ordered=true)
+@test length(groups(m)) == 3
 
 
 @test sum(map(x->x.p, m[Test2])) == before
 @test length(tg) == 10
-@test tg.indices.packed[1] == 2
-@test tg.indices[2] == 1
-@test m[Test2].data[1] == Test2()
-@test m[Test2].data[2] == Test2(2)
-@test m[Test2].data[3] == Test2(3)
-@test m[Test3].shared[m[Test3].data[1]] == Test3()
-@test m[Test3].shared[m[Test3].data[2]] == Test3(2)
-@test m[Test3].shared[m[Test3].data[3]] == Test3(3)
+@test tg.indices.packed[10] == 2
+@test tg.indices[2] == 10
+@test m[Test2].data[10] == Test2()
+@test m[Test2].data[1] == Test2(2)
+@test m[Test2].data[2] == Test2(3)
+@test m[Test3].shared[m[Test3].data[10]] == Test3()
+@test m[Test3].shared[m[Test3].data[1]] == Test3(2)
+@test m[Test3].shared[m[Test3].data[2]] == Test3(3)
 
 @test create_group!(m, Test2, Test3;ordered=true) === tg
 @test_throws ArgumentError tg = create_group!(m, Test1, Test2;ordered=true)
@@ -198,6 +200,3 @@ tg = create_group!(m, Test1, Test2; ordered=true)
 @test length(groups(m)) == 1
 
 @test groups(m)[1] isa ECS.OrderedGroup
-
-
-
