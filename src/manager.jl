@@ -88,6 +88,7 @@ function Base.getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData}
 	id = component_id(T)
 	return components(m)[id]::component_type(T){T}
 end
+
 function Base.getindex(m::AbstractManager, e::Entity)
 	entity_assert(m, e)		
 	data = ComponentData[]
@@ -98,6 +99,7 @@ function Base.getindex(m::AbstractManager, e::Entity)
 	end
 	return data
 end
+
 function Base.getindex(v::Vector{SystemStage}, s::Symbol)
     id = findfirst(x->first(x) == s, v)
     if id === nothing
@@ -107,47 +109,60 @@ function Base.getindex(v::Vector{SystemStage}, s::Symbol)
 end
 
 function Base.setindex!(m::AbstractManager, v::T, e::Entity) where {T<:ComponentData}
-	entity_assert(m, e)
-	if !in(T, m)
-		append!(m, [T])
-	end
-	return m[T][e] = v
+	@boundscheck entity_assert(m, e)
+	ensure_component!(m, T)
+	@boundscheck if !in(e, m[T])
+        m[T][e] = v
+        register_new!(m, T, e)
+        return v
+    end
+	return @inbounds m[T][e] = v
 end
 
-function Base.setindex!(m::AbstractManager, v, ::Type{T}, es::Vector{Entity}) where {T<:ComponentData}
-	comp = m[T]
-	for e in es
-		entity_assert(m, e)
-		comp[e] = v
-	end
-	return v
+function register_new!(m::AbstractManager, ::Type{T}, e::Entity) where {T<:ComponentData}
+    for g in Iterators.filter(x -> T in x, groups(m))
+        comps = map(i -> components(m)[i], g.component_ids)
+        if all(x -> e in x, comps)
+            if g isa OrderedGroup
+                eid = length(g) + 1
+                for c in comps
+                    ensure_entity_id!(c, e.id, eid)
+                end
+                g.len = eid
+            else
+                push!(g.indices, e.id)
+            end
+        end
+    end
 end
 
-function Base.append!(m::AbstractManager, comps)
-    m_comps = components(m)
-    for c in comps
+function ensure_component!(m::AbstractManager, c::Type{<:ComponentData})
+    if !(c in m)
+        m_comps = components(m)
         id = component_id(c)
+        #I think this is never possible
         while id > length(m_comps)
             push!(m_comps, EMPTY_COMPONENT)
         end
-        if !(c in m)
-            comp = component_type(c){c}()
-            m_comps[id] = comp
-        end
+        comp = component_type(c){c}()
+        m_comps[id] = comp
     end
-    return m_comps
 end
 
 function Base.push!(m::AbstractManager, stage::SystemStage)
     comps = requested_components(stage)
-    append!(m, comps)
+    for c in comps
+        ensure_component!(m, c)
+    end
     push!(system_stages(m), stage)
     prepare(stage, m)
 end
 
 function Base.insert!(m::AbstractManager, i::Integer, stage::SystemStage)
     comps = requested_components(stage)
-    append!(m, comps)
+    for c in comps
+        ensure_component!(m, c)
+    end
     insert!(system_stages(m), i, stage)
     prepare(stage, m)
 end
@@ -155,7 +170,9 @@ end
 function Base.push!(m::AbstractManager, stage::Symbol, sys::System)
 	stage = system_stage(m, stage) 
     comps = requested_components(sys)
-    append!(m, comps)
+    for c in comps
+        ensure_component!(m, c)
+    end
 	push!(stage, sys)
     prepare(sys, m)
 end
@@ -163,7 +180,9 @@ end
 function Base.insert!(m::AbstractManager, stage::Symbol, i::Int, sys::System)
 	insert!(system_stage(m, stage), i, sys)
     comps = requested_components(sys)
-    append!(m, comps)
+    for c in comps
+        ensure_component!(m, c)
+    end
     prepare(sys, m)
 end
 
@@ -284,8 +303,8 @@ end
     return groups(m)
 end
 
-function remove_groups!(m::AbstractManager, cs::Type{<:ComponentData}...)
-    ids = findall(x -> all(in(x), cs), groups(m))
+function remove_group!(m::AbstractManager, cs::Type{<:ComponentData}...)
+    ids = findall(x -> all(in(x), cs) && length(x.component_ids) == length(cs), groups(m))
     if ids !== nothing
         deleteat!(groups(m), ids)
     end

@@ -193,10 +193,27 @@ for e in @entities_in(m[Test1] && m[Test2] && m[Test3])
 end
 @test tot == tot2
 
-remove_groups!(m, Test2, Test3)
-@test length(groups(m)) == 1
+remove_group!(m, Test2, Test3)
+@test length(groups(m)) == 2
 
 tg = create_group!(m, Test1, Test2; ordered=true)
-@test length(groups(m)) == 1
+@test length(groups(m)) == 2
 
 @test groups(m)[1] isa ECS.OrderedGroup
+
+tg = group(m, Test1, Test2, Test3)
+beforelen = length(tg)
+m[Test3].shared[m[Test3].data[beforelen+1]] != Test3(5)
+
+m[Entity(1)] = Test3(5)
+@test length(tg) == beforelen+1
+@test m[Test3].shared[m[Test3].data[length(tg)]] == Test3(5)
+@test m[Test2].data[length(tg)] == Test2(0)
+
+
+
+
+
+
+
+
