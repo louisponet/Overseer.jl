@@ -1,11 +1,21 @@
+@inline function Base.:(==)(c1::C, c2::C) where {C<:ComponentData} 
+    for f in fieldnames(C) 
+        if !(getfield(c1, f) == getfield(c2, f)) 
+            return false 
+        end 
+    end 
+    return true 
+end
+
 "Can be used to specify the type of component storage to be used for a given `ComponentData`."
 component_type(::Type{<:ComponentData}) = Component
-
+ 
 # Used together with the indexing scheme to put stubs in
 # component arrays that lack the components for a particular index.
 struct Stub <: ComponentData end
 
-indices_iterator(a::AbstractComponent) = a.indices
+@inline indices_iterator(a::AbstractComponent) = a.indices
+
 """
 The most basic Component type.
 
