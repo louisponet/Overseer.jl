@@ -2,11 +2,9 @@
 
 @inline indices(g::AbstractGroup) = g.indices
 
-function Base.iterate(g::AbstractGroup, state=1)
-    if state > length(g)
-        return nothing
-    end
-    return @inbounds g.indices.packed[state], state+1
+@inline function Base.iterate(g::AbstractGroup, state=1)
+    state > length(g) && return nothing
+    return g.indices.packed[state], state+1
 end
 
 @inline indices_iterator(g::AbstractGroup) = g
@@ -21,13 +19,6 @@ BasicGroup(cs) = BasicGroup(map(x -> component_id(eltype(x)), cs), Indices(share
 
 @inline Base.in(c::Int, g::BasicGroup) = c ∈ g.indices
 Base.length(bg::BasicGroup) = length(bg.indices)
-
-
-
-
-
-
-
 
 "Groups components, and makes sure that the order of entities is the same in each of the components."
 mutable struct OrderedGroup{CT,N} <: AbstractGroup
@@ -110,6 +101,14 @@ function find_lowest_parent(g::OrderedGroup, cs)
     end
 end
 
+function find_lowest_child(g::OrderedGroup, ::Type{T}) where {T}
+    if g.child !== nothing && T in g.child
+        return find_lowest_child(g.child, T)
+    else
+        return g
+    end
+end
+
 function group(g::OrderedGroup, cs)
     if all(in(g), cs) && length(g.components) == length(cs)
         return g
@@ -126,41 +125,29 @@ group(::Nothing, cs) = nothing
 end
 
 Base.@propagate_inbounds @inline function Base.getindex(g::OrderedGroup, e::Entity)
+    @boundscheck if !(e in g)
+        throw(BoundsError(g, e))
+    end
     id = g.indices[e.id]
     return map(x -> x[id], g.components)
+end
+
+function register_new!(g::OrderedGroup, e::Entity)
+    g.len += 1
+    map(x -> ensure_entity_id!(x, e.id, g.len), g.components)
+    if g.parent !== nothing
+        register_new!(g.parent, e)
+    end
 end
 
 @inline function Base.setindex!(g::OrderedGroup, v::T, e::Entity) where {T<:ComponentData}
     comp = g[T]
     @boundscheck if !(e in comp)
-        if g.child !== nothing && T in g.child
-            setindex!(g.child, v, e)
-        else
-            comp[e] = v
-        end
-        g.len += 1
-        map(x -> ensure_entity_id!(x, e.id, g.len), g.components)
+        comp[e] = v
+        register_new!(find_lowest_child(g, T), e)
         return v
     end
     return @inbounds comp[e] = v
 end
 
-@inline function regroup!(m::AbstractManager, cs::Type{<:ComponentData}...)
-    gid = group_id(m, cs)
-    gt = typeof(groups(m)[gid])
-    groups(m)[gid] = gt(map(x->m[x], cs))
-end
 
-@inline function regroup!(m::AbstractManager)
-    for (i, g) in enumerate(groups(m))
-        groups(m)[i] = typeof(g)(map(x->components(m)[x], g.component_ids)) 
-    end
-    return groups(m)
-end
-
-function remove_group!(m::AbstractManager, cs::Type{<:ComponentData}...)
-    ids = findall(x -> all(in(x), cs) && length(x.component_ids) == length(cs), groups(m))
-    if ids !== nothing
-        deleteat!(groups(m), ids)
-    end
-end

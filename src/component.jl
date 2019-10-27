@@ -61,7 +61,7 @@ end
 Base.@propagate_inbounds @inline Base.getindex(c::Component, e::Entity) = c.data[c.indices[e.id]]
 Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, e::Entity) = c.shared[c.data[c.indices[e.id]]]
 Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
-Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) = c.shared[i]
+Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) = c.shared[c.data[i]]
 
 @inline function Base.setindex!(c::Component{T}, v::T, e::Entity) where {T}
     eid = e.id
