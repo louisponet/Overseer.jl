@@ -120,18 +120,12 @@ function Base.setindex!(m::AbstractManager, v::T, e::Entity) where {T<:Component
 end
 
 function register_new!(m::AbstractManager, ::Type{T}, e::Entity) where {T<:ComponentData}
-    for g in Iterators.filter(x -> T in x, groups(m))
-        comps = map(i -> components(m)[i], g.component_ids)
-        if all(x -> e in x, comps)
-            if g isa OrderedGroup
-                eid = length(g) + 1
-                for c in comps
-                    ensure_entity_id!(c, e.id, eid)
-                end
-                g.len = eid
-            else
-                push!(g.indices, e.id)
-            end
+    for g in groups(m)
+        if !(g isa OrderedGroup)
+            continue
+        elseif T in g
+            register_new!(find_lowest_child(g, T), e)
+            return
         end
     end
 end
@@ -253,4 +247,3 @@ function prepare(m::AbstractManager)
 		prepare(s, m)
 	end
 end
-

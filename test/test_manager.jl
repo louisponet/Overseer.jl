@@ -158,6 +158,15 @@ for e in @entities_in(group(m, Test1, Test2))
 end
 @test tot == length(group(m, Test1, Test2))
 
+test_entity = entities(m)[end-1]
+m[test_entity] = Test3(test_entity.id)
+
+@test m[Test1].indices.packed[1:length(t1)] == m[Test2].indices.packed[1:length(t1)] == m[Test3].indices.packed[1:length(t1)] == t1.indices.packed[1:length(t1)]
+@test m[Test1].indices.packed[1:length(t2)] == m[Test2].indices.packed[1:length(t2)]  == t2.indices.packed[1:length(t2)]
+
+@test t1[test_entity] == (m[Test1][test_entity], m[Test2][test_entity], m[Test3][test_entity])
+
+
 # tot = 0
 # for e in @entities_in(group(m, Test2, Test3))
 #     global tot += 1
