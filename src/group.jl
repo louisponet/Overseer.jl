@@ -2,8 +2,6 @@
 
 @inline indices(g::AbstractGroup) = g.indices
 
-@inline Base.in(c::Type{<:ComponentData}, g::AbstractGroup) = component_id(c) ∈ g.component_ids 
-
 function Base.iterate(g::AbstractGroup, state=1)
     if state > length(g)
         return nothing
@@ -31,22 +29,18 @@ Base.length(bg::BasicGroup) = length(bg.indices)
 
 
 
-
-
-
-
-
-
 "Groups components, and makes sure that the order of entities is the same in each of the components."
-mutable struct OrderedGroup{CT} <: AbstractGroup
+mutable struct OrderedGroup{CT,N} <: AbstractGroup
     components::CT
+    component_ids::NTuple{N, Int}
     indices::Indices
     len::Int
     parent::Union{Nothing, OrderedGroup}
     child::Union{Nothing, OrderedGroup}
 end
 
-@inline Base.in(c::Int, g::OrderedGroup) = c ∈ g.indices && g.indices[c] <= length(g)
+@inline Base.in(c::Entity, g::OrderedGroup) = c.id ∈ g.indices && g.indices[c.id] <= length(g)
+@inline Base.in(::Type{T}, g::OrderedGroup) where {T} = component_id(T) ∈ g.component_ids
 
 function OrderedGroup(cs, parent, child)
     valid_entities = shared_entity_ids(cs)
@@ -55,10 +49,11 @@ function OrderedGroup(cs, parent, child)
             ensure_entity_id!(c, e, datid)
         end
     end
-    return OrderedGroup(cs, cs[1].indices, length(valid_entities), parent, child)
+    return OrderedGroup(cs, map(x -> component_id(eltype(x)), cs), cs[1].indices, length(valid_entities), parent, child)
 end
 
 Base.length(g::OrderedGroup) = g.len
+
 Base.in(c::AbstractComponent, g::OrderedGroup) = c in g.components
 
 group(m::AbstractManager,  cs::Type{<:ComponentData}...; ordered=true) = group(m, map(x -> m[x], cs))
@@ -103,24 +98,6 @@ function group(m::AbstractManager, comps)
         end
         return g
     end
-    # for g in Iterators.filter(x -> x isa OrderedGroup, groups(m))
-    #     if all(in(g), cs) && length(g.component_ids) == length(cs)
-    #         return g
-    #     elseif any(in(g), cs)
-    #         any_in = !all(in(g), cs)
-    #     end
-    # end
-    # if ordered
-    #     any_in && 
-    #     basic_id = findfirst(g -> all(in(g), cs) && length(g.component_ids) == length(cs), groups(m))
-    #     basic_id !== nothing && deleteat!(groups(m), basic_id)
-
-    #     # if a superset of the requested entities is already ordered, only the remaining entities will be  ordered
-    #     push!(groups(m), OrderedGroup(comps))
-    # else
-    #     push!(groups(m), BasicGroup(comps))
-    # end
-    # return groups(m)[end]
 end
 
 function find_lowest_parent(g::OrderedGroup, cs)
@@ -143,17 +120,30 @@ end
 
 group(::Nothing, cs) = nothing
 
-@inline function group_id(m::AbstractManager, cs)
-    id = findfirst(g -> all(in(g), cs) && length(g.component_ids) == length(cs), groups(m))
-    if id === nothing
-        error("No group with components $cs found.")
-    end
-    return id
+@generated function Base.getindex(g::OrderedGroup{CT}, ::Type{T}) where {CT,T<:ComponentData}
+    tid = findfirst(x -> eltype(x) == T, CT.parameters)
+    return :(g.components[$tid])
 end
 
-# @inline function group(m::AbstractManager, cs::Type{<:ComponentData}...)
-#     return groups(m)[group_id(m, cs)]
-# end
+Base.@propagate_inbounds @inline function Base.getindex(g::OrderedGroup, e::Entity)
+    id = g.indices[e.id]
+    return map(x -> x[id], g.components)
+end
+
+@inline function Base.setindex!(g::OrderedGroup, v::T, e::Entity) where {T<:ComponentData}
+    comp = g[T]
+    @boundscheck if !(e in comp)
+        if g.child !== nothing && T in g.child
+            setindex!(g.child, v, e)
+        else
+            comp[e] = v
+        end
+        g.len += 1
+        map(x -> ensure_entity_id!(x, e.id, g.len), g.components)
+        return v
+    end
+    return @inbounds comp[e] = v
+end
 
 @inline function regroup!(m::AbstractManager, cs::Type{<:ComponentData}...)
     gid = group_id(m, cs)
