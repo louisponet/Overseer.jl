@@ -53,6 +53,11 @@ function Base.delete!(c::AbstractComponent, es::Vector{Entity})
     end
 end
 
+function Base.permute!(c::AbstractComponent, permvec)
+    permute!(c.data, permvec)
+    permute!(c.indices, permvec)
+end
+
 Base.@propagate_inbounds @inline Base.getindex(c::Component, e::Entity) = c.data[c.indices[e.id]]
 Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, e::Entity) = c.shared[c.data[c.indices[e.id]]]
 Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
@@ -149,53 +154,7 @@ function shared_entity_ids(cs)
     return shared_entity_ids
 end
 
-
-"Forms groups of components." 
-abstract type AbstractGroup end
-
-@inline indices(g::AbstractGroup) = g.indices
-
-@inline Base.in(c::Int, g::AbstractGroup) = c ∈ g.indices
-@inline Base.in(c::Type{<:ComponentData}, g::AbstractGroup) = component_id(c) ∈ g.component_ids 
-
-function Base.iterate(g::AbstractGroup, state=1)
-    if state > length(g)
-        return nothing
-    end
-    return @inbounds g.indices.packed[state], state+1
-end
-
-@inline indices_iterator(g::AbstractGroup) = g
-
-"Groups components, creating a vector of the shared entity ids."
-struct BasicGroup <: AbstractGroup
-    component_ids::NTuple
-    indices::Indices
-end
-
-BasicGroup(cs) = BasicGroup(map(x -> component_id(eltype(x)), cs), Indices(shared_entity_ids(cs)))
-
-Base.length(bg::BasicGroup) = length(bg.indices)
-
-"Groups components, and makes sure that the order of entities is the same in each of the components."
-mutable struct OrderedGroup <: AbstractGroup
-    component_ids::NTuple
-    indices::Indices
-    len::Int
-end
-
-function OrderedGroup(cs)
-    valid_entities = shared_entity_ids(cs)
-    for (datid, e) in enumerate(valid_entities)
-        for c in cs
-            ensure_entity_id!(c, e, datid)
-        end
-    end
-    return OrderedGroup(map(x -> component_id(eltype(x)), cs), cs[1].indices, length(valid_entities))
-end
-
-Base.length(g::OrderedGroup) = g.len
-
+Base.sortperm(c::SharedComponent) = sortperm(c.data)
 
 ########################################
 #                                      #

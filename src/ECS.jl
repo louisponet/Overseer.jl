@@ -4,6 +4,7 @@ module ECS
     abstract type ComponentData end
 
     abstract type AbstractComponent{T<:ComponentData} end
+    abstract type AbstractGroup end
 
     abstract type System end
 
@@ -18,6 +19,7 @@ module ECS
     include("indices.jl")
     include("entity.jl")
     include("component.jl")
+    include("group.jl")
     include("system.jl")
     include("manager.jl")
 

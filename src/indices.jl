@@ -221,6 +221,15 @@ end
 
 Base.collect(s::Indices) = copy(s.packed)
 
+function Base.permute!(s::Indices, p)
+    permute!(s.packed)
+    @inbounds for (i, eid) in s.packed
+        p[i] == i && continue #nothing was changed
+        pageid, offset = pageid_offset(s, eid)
+        s.reverse[page][offset] = i
+    end
+end
+
 struct IndicesIterator{I, T<:Function}
     shortest::I
     test::T

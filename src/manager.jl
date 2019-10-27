@@ -109,14 +109,14 @@ function Base.getindex(v::Vector{SystemStage}, s::Symbol)
 end
 
 function Base.setindex!(m::AbstractManager, v::T, e::Entity) where {T<:ComponentData}
-	@boundscheck entity_assert(m, e)
+	entity_assert(m, e)
 	ensure_component!(m, T)
-	@boundscheck if !in(e, m[T])
+	if !in(e, m[T])
         m[T][e] = v
         register_new!(m, T, e)
         return v
     end
-	return @inbounds m[T][e] = v
+	return m[T][e] = v
 end
 
 function register_new!(m::AbstractManager, ::Type{T}, e::Entity) where {T<:ComponentData}
@@ -254,58 +254,3 @@ function prepare(m::AbstractManager)
 	end
 end
 
-function create_group!(m::AbstractManager,  cs::Type{<:ComponentData}...; ordered=false)
-    comps = map(x -> m[x], cs)
-
-    any_in = false
-    for g in Iterators.filter(x -> x isa OrderedGroup, groups(m))
-        if all(in(g), cs) && length(g.component_ids) == length(cs)
-            return g
-        elseif any(in(g), cs)
-            any_in = !all(in(g), cs)
-        end
-    end
-    if ordered
-        any_in && throw(ArgumentError("An ordered group with at least one but not all of the components $cs already exists.\nAn ordered component group can only be a subgroup of a previously ordered group."))
-        basic_id = findfirst(g -> all(in(g), cs) && length(g.component_ids) == length(cs), groups(m))
-        basic_id !== nothing && deleteat!(groups(m), basic_id)
-
-        # if a superset of the requested entities is already ordered, only the remaining entities will be  ordered
-        push!(groups(m), OrderedGroup(comps))
-    else
-        push!(groups(m), BasicGroup(comps))
-    end
-    return groups(m)[end]
-end
-
-@inline function group_id(m::AbstractManager, cs)
-    id = findfirst(g -> all(in(g), cs) && length(g.component_ids) == length(cs), groups(m))
-    if id === nothing
-        error("No group with components $cs found.")
-    end
-    return id
-end
-
-@inline function group(m::AbstractManager, cs::Type{<:ComponentData}...)
-    return groups(m)[group_id(m, cs)]
-end
-
-@inline function regroup!(m::AbstractManager, cs::Type{<:ComponentData}...)
-    gid = group_id(m, cs)
-    gt = typeof(groups(m)[gid])
-    groups(m)[gid] = gt(map(x->m[x], cs))
-end
-
-@inline function regroup!(m::AbstractManager)
-    for (i, g) in enumerate(groups(m))
-        groups(m)[i] = typeof(g)(map(x->components(m)[x], g.component_ids)) 
-    end
-    return groups(m)
-end
-
-function remove_group!(m::AbstractManager, cs::Type{<:ComponentData}...)
-    ids = findall(x -> all(in(x), cs) && length(x.component_ids) == length(cs), groups(m))
-    if ids !== nothing
-        deleteat!(groups(m), ids)
-    end
-end
