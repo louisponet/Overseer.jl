@@ -78,19 +78,21 @@ function group(m::AbstractManager, comps)
 
     if parent_group !== nothing
         parent = find_lowest_parent(groups(m)[parent_group], comps)
-        if length(parent.components) == length(comps) || (parent.child !== nothing && length(parent.child.components == length(comps)))
-            throw(ArgumentError("An ordered group with at least one but not all of the components $cs already exists.\nAn ordered component group can only be a subgroup of a previously ordered group."))
+        if length(parent.components) == length(comps) || (parent.child !== nothing && length(parent.child.components) == length(comps))
+            throw(ArgumentError("An ordered group with at least one but not all of the components $(eltype.(comps)) already exists.\nAn ordered component group can only be a subgroup of a previously ordered group."))
         end
 
         child  = deepcopy(parent.child)
-        return OrderedGroup(comps, parent, child)
+        g = OrderedGroup(comps, parent, child)
+        parent.child = g
+        return g
     else
         child_group = findfirst(g -> all(in(comps), g.components) && g isa OrderedGroup, groups(m))
         if child_group === nothing
             any_group = findfirst(g -> any(in(g.components), comps), groups(m))
             if any_group !== nothing
 
-                throw(ArgumentError("An ordered group with at least one but not all of the components $cs already exists.\nAn ordered component group can only be a subgroup of a previously ordered group."))
+                throw(ArgumentError("An ordered group with at least one but not all of the components $(eltype.(comps)) already exists.\nAn ordered component group can only be a subgroup of a previously ordered group."))
             end
             g = OrderedGroup(comps, nothing, nothing)
             push!(groups(m), g)
