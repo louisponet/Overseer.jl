@@ -47,9 +47,9 @@ Base.length(g::OrderedGroup) = g.len
 
 Base.in(c::AbstractComponent, g::OrderedGroup) = c in g.components
 
-group(m::AbstractManager,  cs::Type{<:ComponentData}...; ordered=true) = group(m, map(x -> m[x], cs))
+group(m::AbstractOverseer,  cs::Type{<:ComponentData}...; ordered=true) = group(m, map(x -> m[x], cs))
 
-function group(m::AbstractManager, comps)
+function group(m::AbstractOverseer, comps)
     for g in groups(m)
         if !(g isa OrderedGroup)
             continue

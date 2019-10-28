@@ -1,8 +1,8 @@
-# ECS (Entity Component System)
-[![Build Status](https://travis-ci.org/louisponet/ECS.jl.svg?branch=master)](https://travis-ci.org/louisponet/ECS.jl)
-[![Coverage Status](https://coveralls.io/repos/github/louisponet/ECS.jl/badge.svg?branch=master)](https://coveralls.io/github/louisponet/ECS.jl?branch=master)
+# Overseer (Entity Component System)
+[![Build Status](https://travis-ci.org/louisponet/Overseer.jl.svg?branch=master)](https://travis-ci.org/louisponet/Overseer.jl)
+[![Coverage Status](https://coveralls.io/repos/github/louisponet/Overseer.jl/badge.svg?branch=master)](https://coveralls.io/github/louisponet/Overseer.jl?branch=master)
 
-This package supplies a lightweight, performant and friction-free implementation of the [Entity component system](https://en.wikipedia.org/wiki/Entity_component_system) paradigm. It has been used mostly in game development, however I think that it's concept, way of programming and thinking can be applied and used in more broad applications. It offers a very clean and flexible way to gradually build up an application in well separated blocks, while remaining very performant due to the way data is generally structured and used.
+This package supplies a lightweight, performant and friction-free implementation of the [Entity component system](https://en.wikipedia.org/wiki/Entity_component_system)(ECS) paradigm. It has been used mostly in game development, however I think that it's concept, way of programming and thinking can be applied and used in more broad applications. It offers a very clean and flexible way to gradually build up an application in well separated blocks, while remaining very performant due to the way data is generally structured and used.
 
 The API and performance of this package has been evolving as I used it during development of [Glimpse](https://github.com/louisponet/Glimpse.jl).
 
@@ -20,15 +20,15 @@ Each `ComponentData` should be purely a store for data, with no more logic attac
 
 ### System & SystemStage
 This where all the logic should take place. Each system should be an empty struct [(except for maybe holding settings info)](https://github.com/louisponet/Glimpse.jl/blob/43d9e0d6f116343324b4a083d3cb80943225ac4e/src/systems/rendering/depthpeeling.jl#L18) that subtypes `System` and overloads 2 functions:
-- `ECS.update(::System, m::AbstractManager)`
-- `ECS.requested_components(::System)`
+- `Overseer.update(::System, m::AbstractOverseer)`
+- `Overseer.requested_components(::System)`
 
-The first one will be used to perform each update, i.e. perform the system's main logic, while the latter is used when the system is added to an `AbstractManager` to make sure that all `Component`s that the system cares for are present.
+The first one will be used to perform each update, i.e. perform the system's main logic, while the latter is used when the system is added to an `AbstractOverseer` to make sure that all `Component`s that the system cares for are present.
 
 Systems are then grouped together into a `SystemStage` which is really just a `Pair{Symbol, Vector{System}}`, which is just to allow for updating specific groups of systems together if desired.
 
-### AbstractManager
-All Entities, Components and SystemStages are grouped in an `AbstractManager` which takes care of creating new entities, accessing components, updating systems and generally making sure that everything runs.
+### AbstractOverseer
+All Entities, Components and SystemStages are grouped in an `AbstractOverseer` which takes care of creating new entities, accessing components, updating systems and generally making sure that everything runs.
 
 ## Example
 To get a better understanding of how all of this works, it's best to see it in action in an example. 
@@ -36,7 +36,7 @@ Here we will simulate oscillation and rotation of entities.
 
 First we define the components that will be used.
 ```julia
-using ECS
+using Overseer
 using GeometryTypes
 
 @component struct Spatial
@@ -61,9 +61,9 @@ Next we define our systems.
 ```julia
 struct Oscillator <: System end
 
-ECS.requested_components(::Oscillator) = (Spatial, Spring)
+Overseer.requested_components(::Oscillator) = (Spatial, Spring)
 
-function ECS.update(::Oscillator, m::AbstractManager)
+function Overseer.update(::Oscillator, m::AbstractOverseer)
 	spatial = m[Spatial]
 	spring = m[Spring]
 	for e in @entities_in(spatial && spring)
@@ -76,9 +76,9 @@ function ECS.update(::Oscillator, m::AbstractManager)
 end
 
 struct Rotator <: System  end
-ECS.requested_components(::Rotator) = (Spatial, Rotation)
+Overseer.requested_components(::Rotator) = (Spatial, Rotation)
 
-function ECS.update(::Rotator, dio::AbstractManager)
+function Overseer.update(::Rotator, dio::AbstractOverseer)
 	rotation  = dio[Rotation]
 	spatial   = dio[Spatial]
 	dt = 0.01
@@ -95,9 +95,9 @@ end
 
 struct Mover <: System end
 
-ECS.requested_components(::Mover) = (Spatial, )
+Overseer.requested_components(::Mover) = (Spatial, )
 
-function ECS.update(::Mover, m::AbstractManager)
+function Overseer.update(::Mover, m::AbstractOverseer)
     dt = 0.01
     spat = m[Spatial]
     for e in @entities_in(spat)
@@ -113,10 +113,10 @@ given the velocity.
 Each system iterates over the entities that have the components like given to the rules for `@entities_in`. For example 
 `@entities_in(a && b || c && !d)` will iterate through all the entities that are in component `a` and `b` or `c` but not in `d`. 
 
-Now we group these systems in a `:simulation` stage, construct a `Manager` which is a basic `AbstractManager` and generate some entities. 
+Now we group these systems in a `:simulation` stage, construct a `Overseer` which is a basic `AbstractOverseer` and generate some entities. 
 ```julia
 stage = SystemStage(:simulation, [Oscillator(), Rotator(), Mover()])
-m = Manager(stage) #this creates the Manager with the system stage, and also makes sure all requested components are added.
+m = Overseer(stage) #this creates the Overseer with the system stage, and also makes sure all requested components are added.
 
 e1 = Entity(m, 
             Spatial(Point3(1.0, 1.0, 1.0), Vec3(0.0, 0.0, 0.0)), 

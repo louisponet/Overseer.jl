@@ -1,4 +1,4 @@
-name = "ECS"
+name = "Overseer"
 uuid = "1ada24be-c16d-4464-9f61-27c2e0f16645"
 authors = ["louisponet <louisponet@gmail.com>"]
 version = "0.1.0"

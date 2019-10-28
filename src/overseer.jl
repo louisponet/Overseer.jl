@@ -1,12 +1,12 @@
-#To implement AbstractManager interface, the subtype should just define the function manager
+#To implement AbstractOverseer interface, the subtype should just define the function manager
 #where all the fields are like in this one
 
 """
-    Basic Manager. This takes care of creating and destroying entities,
+    Basic Overseer. This takes care of creating and destroying entities,
     making sure all the requested components for the systems are initialized,
     and updates the systems.
 """
-mutable struct Manager <: AbstractManager
+mutable struct Overseer <: AbstractOverseer
 	entities     ::Vector{Entity}
 	free_entities::Vector{Entity}
 	to_delete    ::Vector{Entity}
@@ -16,20 +16,20 @@ mutable struct Manager <: AbstractManager
 
 	system_stages::Vector{SystemStage}
 end
-Manager() = Manager(Entity[],
+Overseer() = Overseer(Entity[],
                     Entity[],
                     Entity[],
                     Union{Component,SharedComponent}[],
                     AbstractGroup[],
                     Pair{Symbol, Vector{System}}[])
 
-function Manager(comps::Vector{Union{Component, SharedComponent}})
-    out = Manager()
+function Overseer(comps::Vector{Union{Component, SharedComponent}})
+    out = Overseer()
     out.components = comps
     return out 
 end
 
-function Manager(cs::AbstractComponent...)
+function Overseer(cs::AbstractComponent...)
 	maxid = length(COMPONENTDATA_TYPES)
 
 	comps = Vector{Union{Component, SharedComponent}}(undef, maxid)
@@ -41,41 +41,41 @@ function Manager(cs::AbstractComponent...)
         	comps[i] = EMPTY_COMPONENT
     	end
 	end
-	return Manager(comps)
+	return Overseer(comps)
 end
 
-Manager(components::Type{<:ComponentData}...) = Manager(map(x -> component_type(x){x}(), components)...)
+Overseer(components::Type{<:ComponentData}...) = Overseer(map(x -> component_type(x){x}(), components)...)
 
-function Manager(system_stages::SystemStage...)
+function Overseer(system_stages::SystemStage...)
 	comps = Type{<:ComponentData}[] 
 	for stage in system_stages
 		append!(comps, requested_components(stage)) 
 	end
-	m = Manager(comps...)
+	m = Overseer(comps...)
 	m.system_stages=[system_stages...]
 	prepare(m)
 	return m
 end
 
-manager(m::Manager)                                               = m
+manager(m::Overseer)                                               = m
 
-components(m::AbstractManager)                                    = manager(m).components
-entities(m::AbstractManager)                                      = manager(m).entities
-free_entities(m::AbstractManager)                                 = manager(m).free_entities
-to_delete(m::AbstractManager)                                     = manager(m).to_delete
-valid_entities(m::AbstractManager)                                = filter(x -> x.id != 0, entities(m))
-system_stages(m::AbstractManager)                                 = manager(m).system_stages
-system_stage(m::AbstractManager, s::Symbol)                       = manager(m).system_stages[s]
-singleton(m::AbstractManager, ::Type{T}) where {T<:ComponentData} = m[T][1]
-groups(m::AbstractManager) = manager(m).groups
+components(m::AbstractOverseer)                                    = manager(m).components
+entities(m::AbstractOverseer)                                      = manager(m).entities
+free_entities(m::AbstractOverseer)                                 = manager(m).free_entities
+to_delete(m::AbstractOverseer)                                     = manager(m).to_delete
+valid_entities(m::AbstractOverseer)                                = filter(x -> x.id != 0, entities(m))
+system_stages(m::AbstractOverseer)                                 = manager(m).system_stages
+system_stage(m::AbstractOverseer, s::Symbol)                       = manager(m).system_stages[s]
+singleton(m::AbstractOverseer, ::Type{T}) where {T<:ComponentData} = m[T][1]
+groups(m::AbstractOverseer) = manager(m).groups
 
 ##### BASE Extensions ####
-function Base.in(::Type{R}, m::AbstractManager) where {R<:ComponentData}
+function Base.in(::Type{R}, m::AbstractOverseer) where {R<:ComponentData}
     cid = component_id(R)
     return cid <= length(components(m)) && components(m)[cid] !== EMPTY_COMPONENT
 end
 
-function Base.empty!(m::AbstractManager)
+function Base.empty!(m::AbstractOverseer)
 	empty!(entities(m))
 	empty!(free_entities(m))
 	empty!(to_delete(m))
@@ -84,12 +84,12 @@ function Base.empty!(m::AbstractManager)
 	empty!(groups(m))
 end
 
-function Base.getindex(m::AbstractManager, ::Type{T}) where {T<:ComponentData}
+function Base.getindex(m::AbstractOverseer, ::Type{T}) where {T<:ComponentData}
 	id = component_id(T)
 	return components(m)[id]::component_type(T){T}
 end
 
-function Base.getindex(m::AbstractManager, e::Entity)
+function Base.getindex(m::AbstractOverseer, e::Entity)
 	entity_assert(m, e)		
 	data = ComponentData[]
 	for c in components(m)
@@ -108,7 +108,7 @@ function Base.getindex(v::Vector{SystemStage}, s::Symbol)
     return v[id]
 end
 
-function Base.setindex!(m::AbstractManager, v::T, e::Entity) where {T<:ComponentData}
+function Base.setindex!(m::AbstractOverseer, v::T, e::Entity) where {T<:ComponentData}
 	entity_assert(m, e)
 	ensure_component!(m, T)
 	if !in(e, m[T])
@@ -119,7 +119,7 @@ function Base.setindex!(m::AbstractManager, v::T, e::Entity) where {T<:Component
 	return m[T][e] = v
 end
 
-function register_new!(m::AbstractManager, ::Type{T}, e::Entity) where {T<:ComponentData}
+function register_new!(m::AbstractOverseer, ::Type{T}, e::Entity) where {T<:ComponentData}
     for g in groups(m)
         if !(g isa OrderedGroup)
             continue
@@ -130,7 +130,7 @@ function register_new!(m::AbstractManager, ::Type{T}, e::Entity) where {T<:Compo
     end
 end
 
-function ensure_component!(m::AbstractManager, c::Type{<:ComponentData})
+function ensure_component!(m::AbstractOverseer, c::Type{<:ComponentData})
     if !(c in m)
         m_comps = components(m)
         id = component_id(c)
@@ -143,7 +143,7 @@ function ensure_component!(m::AbstractManager, c::Type{<:ComponentData})
     end
 end
 
-function Base.push!(m::AbstractManager, stage::SystemStage)
+function Base.push!(m::AbstractOverseer, stage::SystemStage)
     comps = requested_components(stage)
     for c in comps
         ensure_component!(m, c)
@@ -152,7 +152,7 @@ function Base.push!(m::AbstractManager, stage::SystemStage)
     prepare(stage, m)
 end
 
-function Base.insert!(m::AbstractManager, i::Integer, stage::SystemStage)
+function Base.insert!(m::AbstractOverseer, i::Integer, stage::SystemStage)
     comps = requested_components(stage)
     for c in comps
         ensure_component!(m, c)
@@ -161,7 +161,7 @@ function Base.insert!(m::AbstractManager, i::Integer, stage::SystemStage)
     prepare(stage, m)
 end
 
-function Base.push!(m::AbstractManager, stage::Symbol, sys::System)
+function Base.push!(m::AbstractOverseer, stage::Symbol, sys::System)
 	stage = system_stage(m, stage) 
     comps = requested_components(sys)
     for c in comps
@@ -171,7 +171,7 @@ function Base.push!(m::AbstractManager, stage::Symbol, sys::System)
     prepare(sys, m)
 end
 
-function Base.insert!(m::AbstractManager, stage::Symbol, i::Int, sys::System)
+function Base.insert!(m::AbstractOverseer, stage::Symbol, i::Int, sys::System)
 	insert!(system_stage(m, stage), i, sys)
     comps = requested_components(sys)
     for c in comps
@@ -180,7 +180,7 @@ function Base.insert!(m::AbstractManager, stage::Symbol, i::Int, sys::System)
     prepare(sys, m)
 end
 
-function Base.delete!(m::AbstractManager, e::Entity)
+function Base.delete!(m::AbstractOverseer, e::Entity)
 	entity_assert(m, e)
 	push!(free_entities(m), e)
 	entities(m)[e.id] = EMPTY_ENTITY
@@ -191,7 +191,7 @@ function Base.delete!(m::AbstractManager, e::Entity)
 	end
 end
 
-function empty_entities!(m::AbstractManager)
+function empty_entities!(m::AbstractOverseer)
 	empty!(entities(m))
 	empty!(free_entities(m))
 	for c in components(m)
@@ -199,7 +199,7 @@ function empty_entities!(m::AbstractManager)
 	end
 end
 
-function components(manager::AbstractManager, ::Type{T}) where {T<:ComponentData}
+function components(manager::AbstractOverseer, ::Type{T}) where {T<:ComponentData}
 	comps = AbstractComponent[]
 	for c in components(manager)
 		if eltype(c) <: T
@@ -209,18 +209,18 @@ function components(manager::AbstractManager, ::Type{T}) where {T<:ComponentData
 	return comps
 end
 
-function entity_assert(m::AbstractManager, e::Entity)
+function entity_assert(m::AbstractOverseer, e::Entity)
 	es = entities(m)
 	@assert length(es) >= e.id "$e was never initiated."
 	@assert es[e.id] != EMPTY_ENTITY "$e was removed previously."
 end
 
-function schedule_delete!(m::AbstractManager, e::Entity)
+function schedule_delete!(m::AbstractOverseer, e::Entity)
 	entity_assert(m, e)
 	push!(to_delete(m), e)
 end
 
-function delete_scheduled!(m::AbstractManager)
+function delete_scheduled!(m::AbstractOverseer)
 	for c in components(m)
 		delete!(c, to_delete(m))
 	end
@@ -230,19 +230,19 @@ function delete_scheduled!(m::AbstractManager)
 	end
 end
 
-function update(s::SystemStage, m::AbstractManager)
+function update(s::SystemStage, m::AbstractOverseer)
     for s in last(s)
         update(s, m)
     end
 end
 
-function update(m::AbstractManager)
+function update(m::AbstractOverseer)
 	for stage in system_stages(m)
 		update(stage, m)
 	end
 end
 
-function prepare(m::AbstractManager)
+function prepare(m::AbstractOverseer)
 	for s in system_stages(m)
 		prepare(s, m)
 	end

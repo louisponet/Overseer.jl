@@ -9,11 +9,11 @@ module ECS
     abstract type System end
 
     """
-        Abstract type for all entity, component and system managers. In order to use the interface,
-        make sure that every subtype of AbstractManager has an overload for the function `manager` that
-        points towards the fields needed for functionality (see manager.jl for more info)
+        Abstract type for all entity, component and system overseers. In order to use the interface,
+        make sure that every subtype of AbstractOverseer has an overload for the function `overseer` that
+        points towards the fields needed for functionality (see overseer.jl for more info)
     """
-    abstract type AbstractManager end
+    abstract type AbstractOverseer end
 
     include("utils.jl")
     include("indices.jl")
@@ -21,9 +21,9 @@ module ECS
     include("component.jl")
     include("group.jl")
     include("system.jl")
-    include("manager.jl")
+    include("overseer.jl")
 
-    export AbstractManager, Manager, System, SystemStage, Component, SharedComponent, ComponentData, Entity
+    export AbstractOverseer, Overseer, System, SystemStage, Component, SharedComponent, ComponentData, Entity
     export @component, @shared_component, @component_with_kw, @shared_component_with_kw
     export @entities_in
 

@@ -9,7 +9,7 @@ abstract type TComp <: ComponentData end
 
 struct TSys <: System end
 
-function ECS.prepare(::TSys, m::AbstractManager)
+function ECS.prepare(::TSys, m::AbstractOverseer)
     if isempty(entities(m))
         Entity(m, T4())
     end
@@ -17,7 +17,7 @@ end
 
 ECS.requested_components(::TSys) = (T1, T2, T3, T4)
 
-function ECS.update(::TSys, m::AbstractManager)
+function ECS.update(::TSys, m::AbstractOverseer)
     t1 = m[T1]
     t2 = m[T2]
     t3 = m[T3]
@@ -27,7 +27,7 @@ function ECS.update(::TSys, m::AbstractManager)
     end
 end
 
-m = Manager(SystemStage(:default, [TSys()]))
+m = Overseer(SystemStage(:default, [TSys()]))
 
 Entity(m, T1(), T2())
 Entity(m, T2(), T3())
@@ -102,7 +102,7 @@ struct SmallSys <: System end
 
 ECS.requested_components(::SmallSys) = (T1, T3)
 
-m2 = Manager(SystemStage(:default, [SmallSys()]))
+m2 = Overseer(SystemStage(:default, [SmallSys()]))
 
 @test m2.components[2] === ECS.EMPTY_COMPONENT
 
