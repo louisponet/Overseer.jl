@@ -128,7 +128,7 @@ for i=1:10
                 
     e2 = Entity(m, 
                 Test2(length(entities(m))),
-                Test3(length(entities(m))))
+                )
 end
 
 t2 = group(m, Test1, Test2)
@@ -148,8 +148,10 @@ t1 = group(m, Test1, Test2, Test3)
 
 test_entity = last(entities(m))
 t2[test_entity] = Test1()
-
+@test length(t1) == 10
+t1[test_entity] = Test3()
 @test length(t1) == 11
+
 @test t1[test_entity] == (m[Test1][test_entity], m[Test2][test_entity], m[Test3][test_entity])
 
 tot = 0

@@ -133,8 +133,9 @@ Base.@propagate_inbounds @inline function Base.getindex(g::OrderedGroup, e::Enti
 end
 
 function register_new!(g::OrderedGroup, e::Entity)
-    g.len += 1
-    map(x -> ensure_entity_id!(x, e.id, g.len), g.components)
+    if all(map(x -> e in x && ensure_entity_id!(x, e.id, g.len + 1), g.components))
+        g.len += 1
+    end
     if g.parent !== nothing
         register_new!(g.parent, e)
     end

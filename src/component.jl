@@ -150,6 +150,7 @@ function ensure_entity_id!(c::AbstractComponent, e::Int, id::Int)
         set_packed_id!(indices, e, id)
         c.data[id], c.data[packed_id] = c.data[packed_id], c.data[id]
     end
+    return true
 end
 
 function shared_entity_ids(cs)
