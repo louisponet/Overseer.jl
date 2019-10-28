@@ -1,7 +1,7 @@
 name = "Overseer"
 uuid = "1ada24be-c16d-4464-9f61-27c2e0f16645"
 authors = ["louisponet <louisponet@gmail.com>"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
