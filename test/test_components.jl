@@ -2,7 +2,11 @@ using ECS: Component, SharedComponent, Entity
 using ECS: @component, @component_with_kw, @shared_component, @shared_component_with_kw, component_id, component_type, @entities_in
 
 
-@component struct Test1 end
+@component struct Test1
+    p::Int
+end
+
+Test1() = Test1(0)
 
 @component_with_kw struct Test2
     p::Int = 1

@@ -1,4 +1,4 @@
-update(::S, m::AbstractManager) where {S<:System}= error("No update method implemented for $S")
+update(::S, m::AbstractOverseer) where {S<:System}= error("No update method implemented for $S")
 
 requested_components(::System) = ()
 
@@ -18,10 +18,10 @@ function requested_components(stage::SystemStage)
 	return comps
 end
 
-function prepare(s::SystemStage, m::AbstractManager)
+function prepare(s::SystemStage, m::AbstractOverseer)
     for sys in last(s)
         prepare(sys, m)
     end
 end
 
-prepare(::System, ::AbstractManager) = nothing
+prepare(::System, ::AbstractOverseer) = nothing

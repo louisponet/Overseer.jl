@@ -2,7 +2,7 @@ struct Entity
     id::Int
 end
 
-function Entity(m::AbstractManager)
+function Entity(m::AbstractOverseer)
 	if !isempty(free_entities(m))
 		e = pop!(free_entities(m))
 		entities(m)[e.id] = e
@@ -14,7 +14,7 @@ function Entity(m::AbstractManager)
 	return e
 end
 
-function Entity(m::AbstractManager, datas::ComponentData...)
+function Entity(m::AbstractOverseer, datas::ComponentData...)
 	e = Entity(m)
 	for d in datas
 		m[e] = d
@@ -25,5 +25,7 @@ end
 function Entity(c::AbstractComponent, i::Integer)
     return Entity(c.indices.packed[i])
 end
+
+Base.iterate(e::Entity, state=1) = state > 1 ? nothing : (e, state+1)
 
 const EMPTY_ENTITY = Entity(0)
