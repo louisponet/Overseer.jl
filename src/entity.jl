@@ -2,7 +2,7 @@ struct Entity
     id::Int
 end
 
-function Entity(m::AbstractOverseer)
+function Entity(m::AbstractLedger)
 	if !isempty(free_entities(m))
 		e = pop!(free_entities(m))
 		entities(m)[e.id] = e
@@ -14,7 +14,7 @@ function Entity(m::AbstractOverseer)
 	return e
 end
 
-function Entity(m::AbstractOverseer, datas::ComponentData...)
+function Entity(m::AbstractLedger, datas::ComponentData...)
 	e = Entity(m)
 	for d in datas
 		m[e] = d

@@ -1,5 +1,5 @@
-using ECS: Component, SharedComponent, Entity
-using ECS: @component, @component_with_kw, @shared_component, @shared_component_with_kw, component_id, component_type, @entities_in
+using Overseer: Component, SharedComponent, Entity
+using Overseer: @component, @component_with_kw, @shared_component, @shared_component_with_kw, component_id, component_type, @entities_in
 
 
 @component struct Test1
@@ -31,10 +31,10 @@ end
 @test component_type(Test3) == SharedComponent
 @test component_type(Test4) == SharedComponent
 
-c1 = ECS.component_type(Test1){Test1}()
-c2 = ECS.component_type(Test2){Test2}()
-c3 = ECS.component_type(Test3){Test3}()
-c4 = ECS.component_type(Test4){Test4}()
+c1 = Overseer.component_type(Test1){Test1}()
+c2 = Overseer.component_type(Test2){Test2}()
+c3 = Overseer.component_type(Test3){Test3}()
+c4 = Overseer.component_type(Test4){Test4}()
 
 entities1 = [Entity(i) for i in 2:2:10]
 entities2 = [Entity(i) for i in 10:3:20]

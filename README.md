@@ -12,23 +12,23 @@ The main idea of an ECS is to have a very clear separation between data and logi
 ECS can be implemented in a lot of ways, each with slightly different behaviors. This is a small introduction to the specifics of this implementation, since it's important to understand it to be used effectively. 
 
 ### Entity
-Purely an identifier, an index.
+Purely an identifier, used as an index.
 
 ### Component & ComponentData
 The data that can be attached to Entities is a subtype of `ComponentData` and is stored in `Component`. An `Entity` can be used as an index into the `Component` to retrieve its data. 
 Each `ComponentData` should be purely a store for data, with no more logic attached to it than for creation and accessing. 
 
-### System & SystemStage
+### System & Stage
 This where all the logic should take place. Each system should be an empty struct [(except for maybe holding settings info)](https://github.com/louisponet/Glimpse.jl/blob/43d9e0d6f116343324b4a083d3cb80943225ac4e/src/systems/rendering/depthpeeling.jl#L18) that subtypes `System` and overloads 2 functions:
-- `Overseer.update(::System, m::AbstractOverseer)`
-- `Overseer.requested_components(::System)`
+    - `Overseer.update(::System, m::AbstractLedger)`
+    - `Overseer.requested_components(::System)`
 
-The first one will be used to perform each update, i.e. perform the system's main logic, while the latter is used when the system is added to an `AbstractOverseer` to make sure that all `Component`s that the system cares for are present.
+The first one will be used to perform each update, i.e. perform the system's main logic, while the latter is used when the system is added to an `AbstractLedger` to make sure that all `Component`s that the system cares for are present.
 
-Systems are then grouped together into a `SystemStage` which is really just a `Pair{Symbol, Vector{System}}`, which is just to allow for updating specific groups of systems together if desired.
+Systems are then grouped together into a `Stage` which is really just a `Pair{Symbol, Vector{System}}`, which is just to allow for updating specific groups of systems together if desired.
 
-### AbstractOverseer
-All Entities, Components and SystemStages are grouped in an `AbstractOverseer` which takes care of creating new entities, accessing components, updating systems and generally making sure that everything runs.
+### AbstractLedger
+All Entities, Components and Stages are grouped in an `AbstractLedger` which takes care of creating new entities, accessing components, updating systems and generally making sure that everything runs.
 
 ## Example
 To get a better understanding of how all of this works, it's best to see it in action in an example. 
@@ -63,7 +63,7 @@ struct Oscillator <: System end
 
 Overseer.requested_components(::Oscillator) = (Spatial, Spring)
 
-function Overseer.update(::Oscillator, m::AbstractOverseer)
+function Overseer.update(::Oscillator, m::AbstractLedger)
 	spatial = m[Spatial]
 	spring = m[Spring]
 	for e in @entities_in(spatial && spring)
@@ -78,7 +78,7 @@ end
 struct Rotator <: System  end
 Overseer.requested_components(::Rotator) = (Spatial, Rotation)
 
-function Overseer.update(::Rotator, dio::AbstractOverseer)
+function Overseer.update(::Rotator, dio::AbstractLedger)
 	rotation  = dio[Rotation]
 	spatial   = dio[Spatial]
 	dt = 0.01
@@ -97,7 +97,7 @@ struct Mover <: System end
 
 Overseer.requested_components(::Mover) = (Spatial, )
 
-function Overseer.update(::Mover, m::AbstractOverseer)
+function Overseer.update(::Mover, m::AbstractLedger)
     dt = 0.01
     spat = m[Spatial]
     for e in @entities_in(spat)
@@ -113,10 +113,10 @@ given the velocity.
 Each system iterates over the entities that have the components like given to the rules for `@entities_in`. For example 
 `@entities_in(a && b || c && !d)` will iterate through all the entities that are in component `a` and `b` or `c` but not in `d`. 
 
-Now we group these systems in a `:simulation` stage, construct a `Overseer` which is a basic `AbstractOverseer` and generate some entities. 
+Now we group these systems in a `:simulation` stage, construct a `Ledger` which is a basic `AbstractLedger` and generate some entities. 
 ```julia
-stage = SystemStage(:simulation, [Oscillator(), Rotator(), Mover()])
-m = Overseer(stage) #this creates the Overseer with the system stage, and also makes sure all requested components are added.
+stage = Stage(:simulation, [Oscillator(), Rotator(), Mover()])
+m = Ledger(stage) #this creates the Overseer with the system stage, and also makes sure all requested components are added.
 
 e1 = Entity(m, 
             Spatial(Point3(1.0, 1.0, 1.0), Vec3(0.0, 0.0, 0.0)), 

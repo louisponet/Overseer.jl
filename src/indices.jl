@@ -271,7 +271,7 @@ macro indices_in(indices_expr)
         else
             shortest = t_shortest
         end
-        ECS.IndicesIterator(shortest, x -> $expr, length(shortest))
+        Overseer.IndicesIterator(shortest, x -> $expr, length(shortest))
     end)
 end
 

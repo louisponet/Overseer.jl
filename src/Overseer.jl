@@ -1,4 +1,4 @@
-module ECS
+module Overseer
     using Parameters
 
     abstract type ComponentData end
@@ -9,11 +9,11 @@ module ECS
     abstract type System end
 
     """
-        Abstract type for all entity, component and system overseers. In order to use the interface,
-        make sure that every subtype of AbstractOverseer has an overload for the function `overseer` that
-        points towards the fields needed for functionality (see overseer.jl for more info)
+        Abstract type for all entity, component and system ledgers. In order to use the interface,
+        make sure that every subtype of AbstractLedger has an overload for the function `ledger` that
+        points towards the fields needed for functionality (see ledger.jl for more info).
     """
-    abstract type AbstractOverseer end
+    abstract type AbstractLedger end
 
     include("utils.jl")
     include("indices.jl")
@@ -21,13 +21,13 @@ module ECS
     include("component.jl")
     include("group.jl")
     include("system.jl")
-    include("overseer.jl")
+    include("ledger.jl")
 
-    export AbstractOverseer, Overseer, System, SystemStage, Component, SharedComponent, ComponentData, Entity
+    export AbstractLedger, Ledger, System, Stage, Component, SharedComponent, ComponentData, Entity
     export @component, @shared_component, @component_with_kw, @shared_component_with_kw
     export @entities_in
 
-    export update, schedule_delete!, delete_scheduled!, empty_entities!, system_stage, components, entities, system_stages
+    export update, schedule_delete!, delete_scheduled!, empty_entities!, stage, components, entities, stages
     export prepare, singleton, valid_entities, groups, group, create_group!, regroup!, remove_group!
 
 end # module

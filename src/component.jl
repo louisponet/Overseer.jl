@@ -187,13 +187,13 @@ end
 macro entities_in(indices_expr)
     expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
     if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-        return esc(:(ECS.EntityIterator(ECS.indices_iterator($(t_sets[1])))))
+        return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])))))
     else
         return esc(quote
             t_comps = $(Expr(:tuple, t_sets...))
             t_or_comps = $(Expr(:tuple, t_orsets...))
-            sets = map(ECS.indices_iterator, t_comps)
-            orsets = map(ECS.indices_iterator, t_or_comps)
+            sets = map(Overseer.indices_iterator, t_comps)
+            orsets = map(Overseer.indices_iterator, t_or_comps)
             if isempty(sets)
                 minlen, minid = findmin(map(length, orsets))
                 t_shortest = orsets[minid]
@@ -209,7 +209,7 @@ macro entities_in(indices_expr)
             else
                 shortest = t_shortest
             end
-            ECS.EntityIterator(ECS.IndicesIterator(shortest, x -> $expr, length(shortest)))
+            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x -> $expr, length(shortest)))
         end)
     end
 end
@@ -237,14 +237,14 @@ function typename(typedef::Expr)
 end
 
 function process_typedef(typedef, mod, with_kw=false)
-	tn = ECS.typename(typedef)
+	tn = Overseer.typename(typedef)
 	ctypes = COMPONENTDATA_TYPES
 	if !(tn in ctypes)
     	push!(ctypes, tn)
         if typedef.args[2] isa Symbol
-        	typedef.args[2] = Expr(Symbol("<:"), tn, ECS.ComponentData)
+        	typedef.args[2] = Expr(Symbol("<:"), tn, Overseer.ComponentData)
         elseif typedef.args[2].head == Symbol("<:")
-            if !Base.eval(mod, :($(typedef.args[2].args[2]) <: ECS.ComponentData))
+            if !Base.eval(mod, :($(typedef.args[2].args[2]) <: Overseer.ComponentData))
                 error("Components can only have supertypes which are subtypes of ComponentData.")
             end
     	else
@@ -255,13 +255,13 @@ function process_typedef(typedef, mod, with_kw=false)
     	id = length(COMPONENTDATA_TYPES)
         if with_kw
             tq = quote
-            	ECS.Parameters.@with_kw $typedef
-            	ECS.component_id(::Type{$tn}) = $id
+            	Overseer.Parameters.@with_kw $typedef
+            	Overseer.component_id(::Type{$tn}) = $id
             end
         else
             tq = quote
             	$typedef
-            	ECS.component_id(::Type{$tn}) = $id
+            	Overseer.component_id(::Type{$tn}) = $id
             end
         end
     	return tq, tn
@@ -269,10 +269,10 @@ function process_typedef(typedef, mod, with_kw=false)
 end
 
 macro component(typedef)
-	return esc(ECS._component(typedef, __module__))
+	return esc(Overseer._component(typedef, __module__))
 end
 macro component_with_kw(typedef)
-	return esc(ECS._component(typedef, __module__, true))
+	return esc(Overseer._component(typedef, __module__, true))
 end
 
 function _component(typedef, mod::Module, args...)
@@ -281,17 +281,17 @@ function _component(typedef, mod::Module, args...)
     	t1, tn = t 
     	return quote
     	    $t1
-        	ECS.component_type(::Type{$tn}) = ECS.Component
+        	Overseer.component_type(::Type{$tn}) = Overseer.Component
     	end
 	end
 end
 
 macro shared_component(typedef)
-	return esc(ECS._shared_component(typedef, __module__))
+	return esc(Overseer._shared_component(typedef, __module__))
 end
 
 macro shared_component_with_kw(typedef)
-	return esc(ECS._shared_component(typedef, __module__, true))
+	return esc(Overseer._shared_component(typedef, __module__, true))
 end
 
 function _shared_component(typedef, mod::Module, args...)
@@ -300,7 +300,7 @@ function _shared_component(typedef, mod::Module, args...)
     	t1, tn = t 
     	return quote
     	    $t1
-        	ECS.component_type(::Type{$tn}) = ECS.SharedComponent
+        	Overseer.component_type(::Type{$tn}) = Overseer.SharedComponent
     	end
 	end
 end

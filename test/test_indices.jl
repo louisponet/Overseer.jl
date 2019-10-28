@@ -1,4 +1,4 @@
-using ECS: Indices, @indices_in
+using Overseer: Indices, @indices_in
 
 @testset "Construction, collect" begin
     data_in = (1,5,100)
@@ -47,7 +47,7 @@ end
     push!(s, 5000)
     push!(s, 2000)
     pop!(s, 5000)
-    @test s.reverse[end] === ECS.NULL_INT_PAGE
+    @test s.reverse[end] === Overseer.NULL_INT_PAGE
     b = 1:1000
     s = Indices(b)
     @test collect(s) == collect(b)
