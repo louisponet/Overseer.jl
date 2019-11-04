@@ -30,11 +30,12 @@ function Ledger(comps::Vector{Union{Component, SharedComponent}})
 end
 
 function Ledger(cs::AbstractComponent...)
-	maxid = length(COMPONENTDATA_TYPES)
+    compids = map(x->component_id(eltype(x)), cs)
+	maxid = maximum(compids)
 
 	comps = Vector{Union{Component, SharedComponent}}(undef, maxid)
-	for c in cs
-    	comps[component_id(eltype(c))] = c
+	for (c, id) in zip(cs, compids)
+    	comps[id] = c
 	end
 	for i = 1:maxid
     	if !isassigned(comps, i)

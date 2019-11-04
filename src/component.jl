@@ -237,8 +237,11 @@ function typename(typedef::Expr)
 end
 
 function process_typedef(typedef, mod, with_kw=false)
+    if !isdefined(mod, :COMPONENTDATA_TYPES)
+        Base.eval(mod, :(const COMPONENTDATA_TYPES = Symbol[]))
+    end
 	tn = Overseer.typename(typedef)
-	ctypes = COMPONENTDATA_TYPES
+	ctypes = mod.COMPONENTDATA_TYPES
 	if !(tn in ctypes)
     	push!(ctypes, tn)
         if typedef.args[2] isa Symbol
@@ -252,7 +255,7 @@ function process_typedef(typedef, mod, with_kw=false)
         	# typ_pars = typedef.args[2].args[2:end]
         	# typedef.args[2] = Expr(Symbol("<:"), Expr(:curly, tn, typ_pars...), :ComponentData)
     	end
-    	id = length(COMPONENTDATA_TYPES)
+    	id = length(mod.COMPONENTDATA_TYPES)
         if with_kw
             tq = quote
             	Overseer.Parameters.@with_kw $typedef
