@@ -214,6 +214,8 @@ macro entities_in(indices_expr)
     end
 end
 
+Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
+
 ########################################
 #                                      #
 #     ComponentData indexing scheme    #
