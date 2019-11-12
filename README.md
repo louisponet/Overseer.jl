@@ -15,7 +15,7 @@ ECS can be implemented in a lot of ways, each with slightly different behaviors.
 Purely an identifier, used as an index.
 
 ### Component & ComponentData
-The data that can be attached to Entities is a subtype of `ComponentData` and is stored in `Component`. An `Entity` can be used as an index into the `Component` to retrieve its data. 
+The data that can be attached to Entities is a subtype of `ComponentData` and is stored contiguously in a `Component`. An `Entity` can be used as an index into the `Component` to retrieve its data. 
 Each `ComponentData` should be purely a store for data, with no more logic attached to it than for creation and accessing. 
 
 ### System & Stage
