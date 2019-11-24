@@ -29,4 +29,7 @@ module Overseer
 
     export update, schedule_delete!, delete_scheduled!, empty_entities!, stage, components, entities, stages
     export prepare, singleton, valid_entities, groups, group, create_group!, regroup!, remove_group!
+
+    # Components
+    export swap!
 end # module
