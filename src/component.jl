@@ -108,14 +108,14 @@ function Base.empty!(c::SharedComponent)
     return c
 end
 
-function swap!(c::AbstractComponent, e1::Entity, e2::Entity)
+function swap_order!(c::AbstractComponent, e1::Entity, e2::Entity)
     @boundscheck if !in(e1, c)
         throw(BoundsError(c, e1))
     elseif !in(e2, c)
         throw(BoundsError(c, e2))
     end
     @inbounds begin
-        id1, id2 = swap!(c.indices, e1.id, e2.id)
+        id1, id2 = swap_order!(c.indices, e1.id, e2.id)
         c.data[id1], c.data[id2] = c.data[id2], c.data[id1]
     end
 end
@@ -160,7 +160,7 @@ function ensure_entity_id!(c::AbstractComponent, e::Int, id::Int)
     @inbounds packed_id = indices[e]
     if packed_id != id
         @inbounds id_to_swap = indices.packed[id]
-        swap!(indices, e, id_to_swap)
+        swap_order!(indices, e, id_to_swap)
         c.data[id], c.data[packed_id] = c.data[packed_id], c.data[id]
     end
     return true

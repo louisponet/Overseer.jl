@@ -102,11 +102,11 @@ empty!(c3)
 @test isempty(c3)
 
 
-# swapping
+# swap_orderping
 c2[Entity(12)] = Test2()
 
-@test_throws BoundsError swap!(c2, Entity(14), Entity(15))
-@test_throws BoundsError swap!(c2, Entity(13), Entity(14))
+@test_throws BoundsError swap_order!(c2, Entity(14), Entity(15))
+@test_throws BoundsError swap_order!(c2, Entity(13), Entity(14))
 
 orig1 = c2[Entity(12)]
 orig2 = c2[Entity(13)]
@@ -114,7 +114,7 @@ orig2 = c2[Entity(13)]
 orig_id1 = c2.indices[12]
 orig_id2 = c2.indices[13]
 
-swap!(c2, Entity(12), Entity(13))
+swap_order!(c2, Entity(12), Entity(13))
 @test c2[Entity(12)] == orig1
 @test c2[Entity(13)] == orig2
 
@@ -124,8 +124,8 @@ swap!(c2, Entity(12), Entity(13))
 c3[Entity(12)] = Test3()
 c3[Entity(13)] = Test3(50)
 
-@test_throws BoundsError swap!(c3, Entity(14), Entity(15))
-@test_throws BoundsError swap!(c3, Entity(13), Entity(14))
+@test_throws BoundsError swap_order!(c3, Entity(14), Entity(15))
+@test_throws BoundsError swap_order!(c3, Entity(13), Entity(14))
 
 orig1 = c3[Entity(12)]
 orig2 = c3[Entity(13)]
@@ -133,7 +133,7 @@ orig2 = c3[Entity(13)]
 orig_id1 = c3.indices[12]
 orig_id2 = c3.indices[13]
 
-swap!(c3, Entity(12), Entity(13))
+swap_order!(c3, Entity(12), Entity(13))
 @test c3[Entity(12)] == orig1
 @test c3[Entity(13)] == orig2
 
