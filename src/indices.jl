@@ -67,16 +67,16 @@ Base.length(s::Indices) = length(s.packed)
 
 @inline function Base.getindex(s::Indices, p::Page)
     @boundscheck if p.id > length(s.reverse)
-        throw(BoundsError(s, i))
+        throw(BoundsError(s, p))
     end
     page = @inbounds s.reverse[p.id]
 
     @boundscheck if page === NULL_INT_PAGE
-        throw(BoundsError(s, i))
+        throw(BoundsError(s, p))
     end
     id = @inbounds page[p.offset]
     @boundscheck if id === 0
-        throw(BoundsError(s, i))
+        throw(BoundsError(s, p))
     end
     return id 
 end

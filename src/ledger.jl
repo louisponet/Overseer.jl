@@ -90,6 +90,13 @@ function Base.getindex(m::AbstractLedger, ::Type{T}) where {T<:ComponentData}
 	return components(m)[id]::component_type(T){T}
 end
 
+Base.copy(m::AbstractLedger) = Ledger(copy(entities(m)),
+                                      copy(free_entities(m)),
+                                      copy(to_delete(m)),
+                                      [c === EMPTY_COMPONENT ? c : deepcopy(c) for c in components(m)],
+                                      deepcopy(groups(m)), 
+                                      deepcopy(stages(m)))
+
 function Base.getindex(m::AbstractLedger, e::Entity)
 	entity_assert(m, e)		
 	data = ComponentData[]
