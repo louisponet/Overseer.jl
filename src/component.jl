@@ -1,4 +1,4 @@
-@inline function Base.:(==)(c1::C, c2::C) where {C<:ComponentData} 
+@inline function Base.:(==)(c1::C, c2::C) where {C <: ComponentData} 
     for f in fieldnames(C) 
         if !(getfield(c1, f) == getfield(c2, f)) 
             return false 
@@ -23,7 +23,7 @@ Indexing into a component with an `Entity` will return the data linked to that e
 indexing with a regular `Int` will return directly the `ComponentData` that is stored in the data
 vector at that index, i.e. generally not the storage linked to the `Entity` with that `Int` as id.
 """
-struct Component{T<:ComponentData} <: AbstractComponent{T}
+struct Component{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
     data::Vector{T}
 end
@@ -37,13 +37,13 @@ const EMPTY_COMPONENT = Component{Stub}()
 A shared component works very much like a normal component except that it tries to not have duplicate
 data for different entities. This should be used for very large `ComponentData`. 
 """
-struct SharedComponent{T<:ComponentData} <: AbstractComponent{T}
+struct SharedComponent{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
-    data::Vector{Int} #saves the indices into the sharedfor each of the entities
+    data::Vector{Int} # saves the indices into the sharedfor each of the entities
     shared::Vector{T}
 end
 
-SharedComponent{T}() where {T<:ComponentData} = SharedComponent{T}(Indices(), Int[], T[])
+SharedComponent{T}() where {T <: ComponentData} = SharedComponent{T}(Indices(), Int[], T[])
 
 ##### BASE Extensions ####
 Base.eltype(::Type{<:AbstractComponent{T}}) where T = T
@@ -85,7 +85,7 @@ Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) =
 end
 @inline function Base.setindex!(c::SharedComponent{T}, v::T, e::Entity) where {T}
     eid = e.id
-    t_shared_id = findfirst(x -> x==v, c.shared)
+    t_shared_id = findfirst(x->x == v, c.shared)
     shared_id = t_shared_id === nothing ? (push!(c.shared, v); length(c.shared)) : t_shared_id
     @boundscheck if !in(e, c)
         push!(c.indices, eid)
@@ -171,7 +171,7 @@ function shared_entity_ids(cs)
     shortest = cs[id]
     shared_entity_ids = Int[]
     for (i, e) in enumerate(shortest.indices)
-        if all(x -> in(e, x.indices), cs)
+        if all(x->in(e, x.indices), cs)
             push!(shared_entity_ids, e)
         end
     end
@@ -185,13 +185,13 @@ Base.sortperm(c::SharedComponent) = sortperm(c.data)
 #            Iteration                 #
 #                                      #
 ########################################
-struct EntityIterator{T<:Union{IndicesIterator,Indices,AbstractGroup}}
+struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}}
     it::T
 end
 
 Base.length(i::EntityIterator) = length(i.it)
 
-@inline function Base.iterate(i::EntityIterator, state=1)
+@inline function Base.iterate(i::EntityIterator, state = 1)
     n = iterate(i.it, state)
     n === nothing && return n
     return Entity(n[1]), n[2]
@@ -222,7 +222,7 @@ macro entities_in(indices_expr)
             else
                 shortest = t_shortest
             end
-            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x -> $expr, length(shortest)))
+            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr, length(shortest)))
         end)
     end
 end
@@ -251,7 +251,7 @@ function typename(typedef::Expr)
     end
 end
 
-function process_typedef(typedef, mod, with_kw=false)
+function process_typedef(typedef, mod, with_kw = false)
     if !isdefined(mod, :COMPONENTDATA_TYPES)
         Base.eval(mod, :(const COMPONENTDATA_TYPES = Symbol[]))
     end
