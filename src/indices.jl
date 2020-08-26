@@ -3,6 +3,8 @@ const INT_PER_PAGE = div(ccall(:jl_getpagesize, Clong, ()), sizeof(Int))
 # we use this to mark pages not in use, it must never be written to.
 const NULL_INT_PAGE = Vector{Int}()
 
+const Page = NamedTuple{(:id, :offset), Tuple{Int, Int}}
+
 mutable struct Indices
     packed ::Vector{Int}
     reverse::Vector{Vector{Int}}
@@ -48,7 +50,7 @@ Base.lastindex(s::Indices) = s.packed[end]
 
 function pageid_offset(s::Indices, i)
     pageid = div(i - 1, INT_PER_PAGE) + 1
-    return pageid, (i - 1) & (INT_PER_PAGE - 1) + 1
+    return (id = pageid, offset = (i - 1) & (INT_PER_PAGE - 1) + 1)
 end
 
 @inline function Base.in(i, s::Indices)
@@ -63,23 +65,23 @@ end
 
 Base.length(s::Indices) = length(s.packed)
 
-@inline function Base.getindex(s::Indices, i::Integer)
-    pageid, offset = pageid_offset(s, i)
-
-    @boundscheck if pageid > length(s.reverse)
-        throw(BoundsError(s, i))
+@inline function Base.getindex(s::Indices, p::Page)
+    @boundscheck if p.id > length(s.reverse)
+        throw(BoundsError(s, p))
     end
-    page = @inbounds s.reverse[pageid]
+    page = @inbounds s.reverse[p.id]
 
     @boundscheck if page === NULL_INT_PAGE
-        throw(BoundsError(s, i))
+        throw(BoundsError(s, p))
     end
-    id = @inbounds page[offset]
+    id = @inbounds page[p.offset]
     @boundscheck if id === 0
-        throw(BoundsError(s, i))
+        throw(BoundsError(s, p))
     end
     return id 
 end
+
+@inline Base.getindex(s::Indices, i::Integer) = getindex(s, pageid_offset(s, i))
 
 @inline function Base.push!(s::Indices, i::Integer)
     i <= 0 && throw(DomainError("Only positive Ints allowed."))
@@ -317,17 +319,18 @@ function expand_indices_bool(expr)
     return expr, sets, orsets
 end
 
-#This is assuming that it's all inbounds
-function set_packed_id!(ids::Indices, reverse_id::Int, new_packed_id::Int)
-    @inbounds begin
-        from_pageid, from_offset = pageid_offset(ids, reverse_id)
-        from_packed_id = ids.reverse[from_pageid][from_offset]
-        ids.reverse[from_pageid][from_offset] = new_packed_id
+Base.@propagate_inbounds function swap!(ids::Indices, from_page::Page, to_page::Page, packed_id1::Int, packed_id2::Int)
+    ids.reverse[from_page.id][from_page.offset] = packed_id2
+    ids.reverse[to_page.id][to_page.offset]     = packed_id1
+    ids.packed[packed_id1], ids.packed[packed_id2] =
+        ids.packed[packed_id2], ids.packed[packed_id1]
+end
 
-        to_pageid, to_offset = pageid_offset(ids, ids.packed[new_packed_id])
-        ids.reverse[to_pageid][to_offset] = from_packed_id
-
-        ids.packed[from_packed_id], ids.packed[new_packed_id] =
-            ids.packed[new_packed_id], ids.packed[from_packed_id]
-    end
+Base.@propagate_inbounds function swap!(ids::Indices, reverse_id1::Int, reverse_id2::Int)
+    from_page = pageid_offset(ids, reverse_id1)
+    to_page = pageid_offset(ids, reverse_id2)
+    packed_id1 = ids[from_page]
+    packed_id2 = ids[to_page]
+    swap!(ids, from_page, to_page, packed_id1, packed_id2)
+    return packed_id1, packed_id2
 end
