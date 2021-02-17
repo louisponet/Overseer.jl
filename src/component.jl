@@ -1,11 +1,9 @@
-@inline function Base.:(==)(c1::C, c2::C) where {C <: ComponentData} 
-    for f in nfields(c1) 
-        if getfield(c1, f) != getfield(c2, f) 
-            return false 
-        end 
-    end 
-    return true 
-end
+Base.isequal(F::C, G::C) where {C <: ComponentData} =
+    all(f -> isequal(getfield(F, f), getfield(G, f)), 1:nfields(F))::Bool
+    
+Base.:(==)(F::C, G::C) where {C <: ComponentData} =
+    all(f -> getfield(F, f)== getfield(G, f), 1:nfields(F))::Bool
+
 @inline function Base.hash(c::C, h::UInt) where {C <: ComponentData}
     for f in nfields(c)
         h = hash(getfield(c, f), h)
