@@ -10,7 +10,7 @@ mutable struct Ledger <: AbstractLedger
 	entities     ::Vector{Entity}
 	free_entities::Vector{Entity}
 	to_delete    ::Vector{Entity}
-	components   ::Vector{Union{Component,SharedComponent}}
+	components   ::Vector{AbstractComponent}
 	groups       ::Vector{AbstractGroup}
 	# components   ::Dict{DataType, Union{Component,SharedComponent}}
 
@@ -197,6 +197,21 @@ function Base.delete!(m::AbstractLedger, e::Entity)
 			pop!(c, e)
 		end
 	end
+end
+
+@inline function Base.:(==)(l1::A, l2::A) where {A <: AbstractLedger}
+    for i in nfields(l1)
+        if getfield(l1, i) != getfield(l2, i)
+            return false
+        end
+    end
+    return true
+end
+@inline function Base.hash(l::AbstractLedger, h::UInt)
+    for i in nfields(l)
+        h = hash(getfield(l, i), h)
+    end
+    return h
 end
 
 function empty_entities!(m::AbstractLedger)

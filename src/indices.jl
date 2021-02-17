@@ -207,6 +207,13 @@ function Base.:(==)(s1::Indices, s2::Indices)
     return all(in(s1), s2)
 end
 
+function Base.hash(s::Indices, h::UInt)
+    for i in nfields(s)
+        h = hash(getfield(s, i), h)
+    end
+    return h
+end
+
 issubset(a::Indices, b::Indices) = isequal(a, intersect(a, b))
 
 Base.:(<)(a::Indices, b::Indices) = ( a<=b ) && !isequal(a, b)
