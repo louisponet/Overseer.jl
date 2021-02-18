@@ -26,6 +26,7 @@ Ledger() = Ledger(Entity[],
 function Ledger(comps::Vector{Union{Component, SharedComponent}})
     out = Ledger()
     out.components = comps
+    out.entities = Entity.(union(map(x->x.indices.packed, comps)...))
     return out 
 end
 
@@ -127,6 +128,12 @@ function Base.setindex!(m::AbstractLedger, v::T, e::Entity) where {T<:ComponentD
 	return m[T][e] = v
 end
 
+function Base.setindex!(m::AbstractLedger, v::C, ::Type{T}) where {T <: ComponentData, C <: AbstractComponent{T}}
+    id = component_id(T)
+    components(m)[id] = v
+end
+
+
 function register_new!(m::AbstractLedger, ::Type{T}, e::Entity) where {T<:ComponentData}
     for g in groups(m)
         if !(g isa OrderedGroup)
@@ -199,14 +206,12 @@ function Base.delete!(m::AbstractLedger, e::Entity)
 	end
 end
 
-@inline function Base.:(==)(l1::A, l2::A) where {A <: AbstractLedger}
-    for i in nfields(l1)
-        if getfield(l1, i) != getfield(l2, i)
-            return false
-        end
-    end
-    return true
-end
+Base.isequal(F::C, G::C) where {C <: AbstractLedger} =
+    all(f -> isequal(getfield(F, f), getfield(G, f)), 1:nfields(F))::Bool
+    
+Base.:(==)(F::C, G::C) where {C <: AbstractLedger} =
+    all(f -> getfield(F, f)== getfield(G, f), 1:nfields(F))::Bool
+    
 @inline function Base.hash(l::AbstractLedger, h::UInt)
     for i in nfields(l)
         h = hash(getfield(l, i), h)
