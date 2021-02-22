@@ -1,10 +1,14 @@
-@inline function Base.:(==)(c1::C, c2::C) where {C <: ComponentData} 
-    for f in fieldnames(C) 
-        if !(getfield(c1, f) == getfield(c2, f)) 
-            return false 
-        end 
-    end 
-    return true 
+Base.isequal(F::C, G::C) where {C <: ComponentData} =
+    all(f -> isequal(getfield(F, f), getfield(G, f)), 1:nfields(F))::Bool
+    
+Base.:(==)(F::C, G::C) where {C <: ComponentData} =
+    all(f -> getfield(F, f)== getfield(G, f), 1:nfields(F))::Bool
+
+@inline function Base.hash(c::C, h::UInt) where {C <: ComponentData}
+    for f in nfields(c)
+        h = hash(getfield(c, f), h)
+    end
+    return h
 end
 
 "Can be used to specify the type of component storage to be used for a given `ComponentData`."
@@ -39,7 +43,7 @@ data for different entities. This should be used for very large `ComponentData`.
 """
 struct SharedComponent{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
-    data::Vector{Int} # saves the indices into the sharedfor each of the entities
+    data::Vector{Int} # saves the indices into the shared for each of the entities
     shared::Vector{T}
 end
 
@@ -180,6 +184,12 @@ end
 
 Base.sortperm(c::SharedComponent) = sortperm(c.data)
 
+@inline function Base.hash(c::C, h::UInt) where {C <: AbstractComponent}
+    for f in nfields(c)
+        h = hash(getfield(c,f), h)
+    end
+    return h
+end
 ########################################
 #                                      #
 #            Iteration                 #
@@ -228,6 +238,16 @@ macro entities_in(indices_expr)
 end
 
 Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
+
+function Base.:(==)(c1::C1, c2::C2) where {C1 <: AbstractComponent, C2 <: AbstractComponent}
+    if eltype(C1) != eltype(C2) ||length(c1) != length(c2)
+        return false
+    elseif length(c1) > 20 && hash(c1) != hash(c2)
+        return false
+    else
+        return all(e -> (e in c2) && (@inbounds c2[e] == c1[e]), @entities_in(c1))
+    end
+end
 
 ########################################
 #                                      #
