@@ -245,13 +245,8 @@ function Base.:(==)(c1::C1, c2::C2) where {C1 <: AbstractComponent, C2 <: Abstra
     elseif length(c1) > 20 && hash(c1) != hash(c2)
         return false
     else
-        for e in @entities_in(c1)
-            if !(e in c2) || @inbounds c2[e] != c1[e]
-                return false
-            end
-        end
+        return all(e -> (e in c2) && (@inbounds c2[e] == c1[e]), @entities_in(c1))
     end
-    return true
 end
 
 ########################################
