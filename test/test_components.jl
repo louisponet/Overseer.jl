@@ -102,7 +102,7 @@ empty!(c3)
 @test isempty(c3)
 
 
-# swap_orderping
+# swap_ordering
 c2[Entity(12)] = Test2()
 
 @test_throws BoundsError swap_order!(c2, Entity(14), Entity(15))

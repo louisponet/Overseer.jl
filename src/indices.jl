@@ -326,18 +326,18 @@ function expand_indices_bool(expr)
     return expr, sets, orsets
 end
 
-Base.@propagate_inbounds function swap!(ids::Indices, from_page::Page, to_page::Page, packed_id1::Int, packed_id2::Int)
+Base.@propagate_inbounds function swap_order!(ids::Indices, from_page::Page, to_page::Page, packed_id1::Int, packed_id2::Int)
     ids.reverse[from_page.id][from_page.offset] = packed_id2
     ids.reverse[to_page.id][to_page.offset]     = packed_id1
     ids.packed[packed_id1], ids.packed[packed_id2] =
         ids.packed[packed_id2], ids.packed[packed_id1]
 end
 
-Base.@propagate_inbounds function swap!(ids::Indices, reverse_id1::Int, reverse_id2::Int)
+Base.@propagate_inbounds function swap_order!(ids::Indices, reverse_id1::Int, reverse_id2::Int)
     from_page = pageid_offset(ids, reverse_id1)
     to_page = pageid_offset(ids, reverse_id2)
     packed_id1 = ids[from_page]
     packed_id2 = ids[to_page]
-    swap!(ids, from_page, to_page, packed_id1, packed_id2)
+    swap_order!(ids, from_page, to_page, packed_id1, packed_id2)
     return packed_id1, packed_id2
 end
