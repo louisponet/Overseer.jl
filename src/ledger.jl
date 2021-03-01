@@ -256,6 +256,7 @@ function delete_scheduled!(m::AbstractLedger)
 		entities(m)[e.id] = EMPTY_ENTITY
 		push!(free_entities(m), e)
 	end
+	empty!(to_delete(m))
 end
 
 function update(s::Stage, m::AbstractLedger)
