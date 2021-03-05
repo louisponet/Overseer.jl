@@ -67,6 +67,13 @@ delete_scheduled!(m)
 
 @test length(m[T4]) == 3
 
+# Ensure delete_scheduled!() does nothing when no entities are scheduled for
+# deletion, but some of the old ids have been recycled
+for _ = 5:10
+    Entity(m, T4())
+end
+delete_scheduled!(m)
+@test length(m[T4]) == 9
 
 empty!(m)
 @test isempty(m.entities)

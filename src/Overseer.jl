@@ -31,5 +31,5 @@ module Overseer
     export prepare, singleton, valid_entities, groups, group, create_group!, regroup!, remove_group!
 
     # Components
-    export swap!
+    export swap_order!
 end # module
