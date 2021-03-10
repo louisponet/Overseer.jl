@@ -10,7 +10,7 @@ mutable struct Ledger <: AbstractLedger
 	entities     ::Vector{Entity}
 	free_entities::Vector{Entity}
 	to_delete    ::Vector{Entity}
-	components   ::Vector{AbstractComponent}
+	components   ::Dict{DataType, AbstractComponent}
 	groups       ::Vector{AbstractGroup}
 	# components   ::Dict{DataType, Union{Component,SharedComponent}}
 
@@ -19,29 +19,21 @@ end
 Ledger() = Ledger(Entity[],
                     Entity[],
                     Entity[],
-                    Union{Component,SharedComponent}[],
+                    Dict{DataType, AbstractComponent}(),
                     AbstractGroup[],
                     Pair{Symbol, Vector{System}}[])
 
-function Ledger(comps::Vector{Union{Component, SharedComponent}})
+function Ledger(comps::Dict{DataType, AbstractComponent})
     out = Ledger()
     out.components = comps
-    out.entities = Entity.(union(map(x->x.indices.packed, comps)...))
+    out.entities = Entity.(union(map(x->x.indices.packed, values(comps))...))
     return out 
 end
 
 function Ledger(cs::AbstractComponent...)
-    compids = map(x->component_id(eltype(x)), cs)
-	maxid = maximum(compids)
-
-	comps = Vector{Union{Component, SharedComponent}}(undef, maxid)
-	for (c, id) in zip(cs, compids)
-    	comps[id] = c
-	end
-	for i = 1:maxid
-    	if !isassigned(comps, i)
-        	comps[i] = EMPTY_COMPONENT
-    	end
+	comps = Dict{DataType, AbstractComponent}()
+	for c in cs
+    	comps[eltype(c)] = c
 	end
 	return Ledger(comps)
 end
@@ -73,8 +65,7 @@ singleton(m::AbstractLedger, ::Type{T}) where {T<:ComponentData} = m[T][1]
 
 ##### BASE Extensions ####
 function Base.in(::Type{R}, m::AbstractLedger) where {R<:ComponentData}
-    cid = component_id(R)
-    return cid <= length(components(m)) && components(m)[cid] !== EMPTY_COMPONENT
+    return R ∈ keys(components(m))
 end
 
 function Base.empty!(m::AbstractLedger)
@@ -87,21 +78,20 @@ function Base.empty!(m::AbstractLedger)
 end
 
 function Base.getindex(m::AbstractLedger, ::Type{T}) where {T<:ComponentData}
-	id = component_id(T)
-	return components(m)[id]::component_type(T){T}
+	return components(m)[T]::component_type(T){T}
 end
 
 Base.copy(m::AbstractLedger) = Ledger(copy(entities(m)),
                                       copy(free_entities(m)),
                                       copy(to_delete(m)),
-                                      [c === EMPTY_COMPONENT ? c : deepcopy(c) for c in components(m)],
+                                      deepcopy(components(m)),
                                       deepcopy(groups(m)), 
                                       deepcopy(stages(m)))
 
 function Base.getindex(m::AbstractLedger, e::Entity)
 	entity_assert(m, e)		
 	data = ComponentData[]
-	for c in components(m)
+	for c in values(components(m))
 		if in(e, c)
 			push!(data, c[e])
 		end
@@ -129,8 +119,7 @@ function Base.setindex!(m::AbstractLedger, v::T, e::Entity) where {T<:ComponentD
 end
 
 function Base.setindex!(m::AbstractLedger, v::C, ::Type{T}) where {T <: ComponentData, C <: AbstractComponent{T}}
-    id = component_id(T)
-    components(m)[id] = v
+    return components(m)[T] = v
 end
 
 
@@ -145,16 +134,11 @@ function register_new!(m::AbstractLedger, ::Type{T}, e::Entity) where {T<:Compon
     end
 end
 
-function ensure_component!(m::AbstractLedger, c::Type{<:ComponentData})
+function ensure_component!(m::AbstractLedger, c::Type{T}) where {T<:ComponentData}
     if !(c in m)
         m_comps = components(m)
-        id = component_id(c)
-        #I think this is never possible
-        while id > length(m_comps)
-            push!(m_comps, EMPTY_COMPONENT)
-        end
         comp = component_type(c){c}()
-        m_comps[id] = comp
+        m_comps[T] = comp
     end
 end
 
@@ -199,7 +183,7 @@ function Base.delete!(m::AbstractLedger, e::Entity)
 	entity_assert(m, e)
 	push!(free_entities(m), e)
 	entities(m)[e.id] = EMPTY_ENTITY
-	for c in components(m)
+	for c in values(components(m))
 		if in(e, c)
 			pop!(c, e)
 		end
@@ -222,14 +206,14 @@ end
 function empty_entities!(m::AbstractLedger)
 	empty!(entities(m))
 	empty!(free_entities(m))
-	for c in components(m)
+	for c in values(components(m))
     	empty!(c)
 	end
 end
 
 function components(ledger::AbstractLedger, ::Type{T}) where {T<:ComponentData}
 	comps = AbstractComponent[]
-	for c in components(ledger)
+	for c in values(components(ledger))
 		if eltype(c) <: T
 			push!(comps, c)
 		end
@@ -249,7 +233,7 @@ function schedule_delete!(m::AbstractLedger, e::Entity)
 end
 
 function delete_scheduled!(m::AbstractLedger)
-	for c in components(m)
+	for c in values(components(m))
 		delete!(c, to_delete(m))
 	end
 	for e in to_delete(m)
