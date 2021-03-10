@@ -11,19 +11,15 @@ end
 
 "Groups components, creating a vector of the shared entity ids."
 struct BasicGroup <: AbstractGroup
-    component_ids::NTuple
     indices::Indices
 end
-
-BasicGroup(cs) = BasicGroup(map(x -> component_id(eltype(x)), cs), Indices(shared_entity_ids(cs)))
 
 @inline Base.in(c::Int, g::BasicGroup) = c ∈ g.indices
 Base.length(bg::BasicGroup) = length(bg.indices)
 
 "Groups components, and makes sure that the order of entities is the same in each of the components."
-mutable struct OrderedGroup{CT,N} <: AbstractGroup
+mutable struct OrderedGroup{CT} <: AbstractGroup
     components::CT
-    component_ids::NTuple{N, Int}
     indices::Indices
     len::Int
     parent::Union{Nothing, OrderedGroup}
@@ -31,7 +27,7 @@ mutable struct OrderedGroup{CT,N} <: AbstractGroup
 end
 
 @inline Base.in(c::Entity, g::OrderedGroup) = c.id ∈ g.indices && g.indices[c.id] <= length(g)
-@inline Base.in(::Type{T}, g::OrderedGroup) where {T} = component_id(T) ∈ g.component_ids
+@inline Base.in(::Type{T}, g::OrderedGroup) where {T} = any(x -> eltype(x) == T, g.components)
 
 function OrderedGroup(cs, parent, child)
     valid_entities = shared_entity_ids(cs)
@@ -40,7 +36,7 @@ function OrderedGroup(cs, parent, child)
             ensure_entity_id!(c, e, datid)
         end
     end
-    return OrderedGroup(cs, map(x -> component_id(eltype(x)), cs), cs[1].indices, length(valid_entities), parent, child)
+    return OrderedGroup(cs,cs[1].indices, length(valid_entities), parent, child)
 end
 
 Base.length(g::OrderedGroup) = g.len

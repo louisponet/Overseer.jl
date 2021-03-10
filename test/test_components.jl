@@ -1,6 +1,4 @@
-using Overseer: Component, SharedComponent, Entity
-using Overseer: @component, @component_with_kw, @shared_component, @shared_component_with_kw, component_id, component_type, @entities_in
-
+using Parameters
 
 @component struct Test1
     p::Int
@@ -8,7 +6,7 @@ end
 
 Test1() = Test1(0)
 
-@component_with_kw struct Test2
+@component @with_kw struct Test2
     p::Int = 1
 end
 
@@ -17,19 +15,14 @@ end
 end
 Test3() = Test3(1)
 
-@shared_component_with_kw struct Test4
+@shared_component @with_kw struct Test4
     p::Int = 1
 end
 
-@test component_id(Test1) == 1
-@test component_id(Test2) == 2
-@test component_id(Test3) == 3
-@test component_id(Test4) == 4
-
-@test component_type(Test1) == Component
-@test component_type(Test2) == Component
-@test component_type(Test3) == SharedComponent
-@test component_type(Test4) == SharedComponent
+@test Overseer.component_type(Test1) == Component
+@test Overseer.component_type(Test2) == Component
+@test Overseer.component_type(Test3) == SharedComponent
+@test Overseer.component_type(Test4) == SharedComponent
 
 c1 = Overseer.component_type(Test1){Test1}()
 c2 = Overseer.component_type(Test2){Test2}()
