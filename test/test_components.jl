@@ -139,3 +139,21 @@ swap_order!(c3, Entity(12), Entity(13))
 
 @test c3.indices[13] == orig_id1
 @test c3.indices[12] == orig_id2
+
+# Issue 4: collect() and iterator length
+@testset "collect" begin
+    e1 = Entity(1)
+    e2 = Entity(2)
+    e3 = Entity(3)
+
+    comp1 = Overseer.component_type(Test1){Test1}()
+    comp2 = Overseer.component_type(Test2){Test2}()
+    comp1[e1] = Test1(1)
+    comp1[e2] = Test1(1); comp2[e2] = Test2(1)
+    comp2[e3] = Test2(1)
+
+    iter = @entities_in(comp1 && comp2)
+    es = collect(iter)
+    @test es == [e2]
+    @test eltype(es) == Entity
+end

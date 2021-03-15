@@ -242,15 +242,14 @@ end
 struct IndicesIterator{I, T<:Function}
     shortest::I
     test::T
-    len::Int
 end
 
-Base.length(it::IndicesIterator) = it.len
+Base.IteratorSize(::IndicesIterator) = Base.SizeUnknown()
 
 @inline indices(i::Indices) = i
 
 @inline function Base.iterate(it::IndicesIterator, state=1)
-    it_length = length(it)
+    it_length = length(it.shortest)
     for i=state:it_length
         id = indices(it.shortest).packed[i]
         if it.test(id)
@@ -280,7 +279,7 @@ macro indices_in(indices_expr)
         else
             shortest = t_shortest
         end
-        Overseer.IndicesIterator(shortest, x -> $expr, length(shortest))
+        Overseer.IndicesIterator(shortest, x -> $expr)
     end)
 end
 
