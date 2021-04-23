@@ -251,15 +251,11 @@ function Base.:(==)(c1::C1, c2::C2) where {C1 <: AbstractComponent, C2 <: Abstra
     end
 end
 
-########################################
-#                                      #
-#     ComponentData indexing scheme    #
-#                                      #
-########################################
-
-const COMPONENTDATA_TYPES = Symbol[]
-
-component_id(::Type{<:ComponentData}) = -1
+##############################
+#                            #
+#     Component Macros       #
+#                            #
+##############################
 
 function typename(typedef::Expr)
     if typedef.args[2] isa Symbol
@@ -273,56 +269,32 @@ function typename(typedef::Expr)
     end
 end
 
-function process_typedef(typedef, mod, with_kw = false)
-    if !isdefined(mod, :COMPONENTDATA_TYPES)
-        Base.eval(mod, :(const COMPONENTDATA_TYPES = Symbol[]))
-    end
-	tn = Overseer.typename(typedef)
-	ctypes = mod.COMPONENTDATA_TYPES
-	if !(tn in ctypes)
-    	push!(ctypes, tn)
-        if typedef.args[2] isa Symbol
-        	typedef.args[2] = Expr(Symbol("<:"), tn, Overseer.ComponentData)
-        elseif typedef.args[2].head == Symbol("<:")
-            if !Base.eval(mod, :($(typedef.args[2].args[2]) <: Overseer.ComponentData))
-                error("Components can only have supertypes which are subtypes of ComponentData.")
-            end
-    	else
-        	error("Components can not have type parameters")
-        	# typ_pars = typedef.args[2].args[2:end]
-        	# typedef.args[2] = Expr(Symbol("<:"), Expr(:curly, tn, typ_pars...), :ComponentData)
-    	end
-    	id = length(mod.COMPONENTDATA_TYPES)
-        if with_kw
-            tq = quote
-            	Overseer.Parameters.@with_kw $typedef
-            	Overseer.component_id(::Type{$tn}) = $id
-            end
-        else
-            tq = quote
-            	$typedef
-            	Overseer.component_id(::Type{$tn}) = $id
-            end
+function process_typedef(typedef, mod)
+    typedef_ = typedef.args[2] isa LineNumberNode ? typedef.args[3] : typedef # LineNumberNode check handles macros in typedef
+	tn = Overseer.typename(typedef_)
+	if typedef_.args[2] isa Symbol 
+          typedef_.args[2] = Expr(Symbol("<:"), tn, Overseer.ComponentData) 
+    elseif typedef_.args[2].head == Symbol("<:") 
+        if !Base.eval(mod, :($(typedef_.args[2].args[2]) <: Overseer.ComponentData)) 
+            error("Components can only have supertypes which are subtypes of ComponentData.") 
         end
-    	return tq, tn
     end
+    tq = quote
+    	$typedef
+    end
+	return tq, tn
 end
 
 macro component(typedef)
 	return esc(Overseer._component(typedef, __module__))
 end
-macro component_with_kw(typedef)
-	return esc(Overseer._component(typedef, __module__, true))
-end
 
-function _component(typedef, mod::Module, args...)
-    t = process_typedef(typedef, mod, args...)
-    if t !== nothing
-    	t1, tn = t 
-    	return quote
-    	    $t1
-        	Overseer.component_type(::Type{$tn}) = Overseer.Component
-    	end
+function _component(typedef, mod)
+    t = process_typedef(typedef, mod)
+	t1, tn = t 
+	return quote
+	    $t1
+    	Overseer.component_type(::Type{$tn}) = Overseer.Component
 	end
 end
 
@@ -330,18 +302,12 @@ macro shared_component(typedef)
 	return esc(Overseer._shared_component(typedef, __module__))
 end
 
-macro shared_component_with_kw(typedef)
-	return esc(Overseer._shared_component(typedef, __module__, true))
-end
-
-function _shared_component(typedef, mod::Module, args...)
-    t = process_typedef(typedef, mod, args...)
-    if t !== nothing
-    	t1, tn = t 
-    	return quote
-    	    $t1
-        	Overseer.component_type(::Type{$tn}) = Overseer.SharedComponent
-    	end
+function _shared_component(typedef, mod)
+    t = process_typedef(typedef, mod)
+	t1, tn = t 
+	return quote
+	    $t1
+    	Overseer.component_type(::Type{$tn}) = Overseer.SharedComponent
 	end
 end
 

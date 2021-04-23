@@ -1,6 +1,4 @@
 module Overseer
-    using Parameters
-
     abstract type ComponentData end
 
     abstract type AbstractComponent{T<:ComponentData} end

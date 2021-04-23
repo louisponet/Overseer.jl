@@ -82,7 +82,7 @@ empty!(m)
 
 push!(m, Stage(:default, [TSys()]))
 
-@test length(m.components) == 8
+@test length(m.components) == 4
 
 struct TSys2 <: System end
 
@@ -110,8 +110,6 @@ struct SmallSys <: System end
 Overseer.requested_components(::SmallSys) = (T1, T3)
 
 m2 = Ledger(Stage(:default, [SmallSys()]))
-
-@test m2.components[2] === Overseer.EMPTY_COMPONENT
 
 e = Entity(m2)
 m2[e] = T2()
