@@ -199,9 +199,11 @@ struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}}
     it::T
 end
 
+Base.eltype(::EntityIterator) = Entity
+Base.IteratorSize(i::EntityIterator) = Base.IteratorSize(i.it)
 Base.length(i::EntityIterator) = length(i.it)
 
-@inline function Base.iterate(i::EntityIterator, state = 1)
+function Base.iterate(i::EntityIterator, state = 1)
     n = iterate(i.it, state)
     n === nothing && return n
     return Entity(n[1]), n[2]
@@ -232,7 +234,7 @@ macro entities_in(indices_expr)
             else
                 shortest = t_shortest
             end
-            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr, length(shortest)))
+            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr))
         end)
     end
 end
