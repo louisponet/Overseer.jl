@@ -210,11 +210,11 @@ Base.length(i::EntityIterator) = length(i.it)
     n = iterate(i.it, state)
     n === nothing && return n
     e = Entity(n[1])
-    return pointers(i.components, e), n[2]
+    return @inbounds pointers(i.components, e), n[2]
 end
 
-@inline pointers(x::Tuple{}, e::Entity) = ()
-@inline pointers(x::Tuple, e::Entity) = (pointer(first(x), e), pointers(Base.tail(x), e)...)
+Base.@propagate_inbounds @inline pointers(x::Tuple{}, e::Entity) = ()
+Base.@propagate_inbounds @inline pointers(x::Tuple, e::Entity) = (pointer(first(x), e), pointers(Base.tail(x), e)...)
 
 Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
     
@@ -248,20 +248,8 @@ macro entities_in(indices_expr)
     end
 end
 
-function propagate_ledger(l, expr)
-    if expr isa Symbol || expr.head == :curly
-        return :($l[$expr])
-    else
-        expr.args[1] = propagate_ledger(l, expr.args[1])
-        expr.args[2] = propagate_ledger(l, expr.args[2])
-        return expr
-    end
-end
-
 macro entities_in(ledger, indices_expr)
-    t = propagate_ledger(ledger, indices_expr)
-    expr, t_sets, t_orsets = expand_indices_bool(t)
-
+    expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
     t_comp_defs = quote
     end
     comp_sym_map = Dict()
@@ -269,11 +257,12 @@ macro entities_in(ledger, indices_expr)
         sym = gensym()
         t_comp_defs = quote
             $t_comp_defs
-            $sym = $s 
+            $sym = $ledger[$s]
         end
         comp_sym_map[s] = sym
     end
     t_comp_defs = MacroTools.rmlines(MacroTools.flatten(t_comp_defs))
+    @show t_comp_defs
     
     expr = MacroTools.postwalk(expr) do x
         if x in keys(comp_sym_map)
@@ -282,11 +271,14 @@ macro entities_in(ledger, indices_expr)
             return x
         end
     end
+    t_sets = map(x -> comp_sym_map[x], t_sets)
+    t_orsets = map(x -> comp_sym_map[x], t_orsets)
     
     if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
         return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])))))
     else
         return esc(quote
+            $t_comp_defs
             t_comps = $(Expr(:tuple, t_sets...))
             t_or_comps = $(Expr(:tuple, t_orsets...))
             sets = map(Overseer.indices_iterator, t_comps)
@@ -306,7 +298,6 @@ macro entities_in(ledger, indices_expr)
             else
                 shortest = t_shortest
             end
-            $t_comp_defs
             Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr), (t_comps..., t_or_comps...,))
         end)
     end
