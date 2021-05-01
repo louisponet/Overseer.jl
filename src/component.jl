@@ -94,6 +94,9 @@ end
     return v
 end
 
+Base.@propagate_inbounds @inline Base.pointer(c::Component, e::Entity) =
+    pointer(c.data, c.indices[e.id])
+
 function Base.empty!(c::Component)
     empty!(c.indices)
     empty!(c.data)
@@ -184,25 +187,37 @@ Base.sortperm(c::SharedComponent) = sortperm(c.data)
     end
     return h
 end
+
+@generated function Base.getindex(t::Tup, ::Type{T}) where {Tup <: Tuple, T<:ComponentData}
+    id = findfirst(x -> eltype(x) == T, Tup.parameters)
+    return :(unsafe_load(@inbounds getindex(t, $id))::T)
+end
 ########################################
 #                                      #
 #            Iteration                 #
 #                                      #
 ########################################
-struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}}
+struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}, TT <: Tuple}
     it::T
+    components::TT
 end
 
 Base.eltype(::EntityIterator) = Entity
 Base.IteratorSize(i::EntityIterator) = Base.IteratorSize(i.it)
 Base.length(i::EntityIterator) = length(i.it)
 
-function Base.iterate(i::EntityIterator, state = 1)
+@inline function Base.iterate(i::EntityIterator, state = 1)
     n = iterate(i.it, state)
     n === nothing && return n
-    return Entity(n[1]), n[2]
+    e = Entity(n[1])
+    return pointers(i.components, e), n[2]
 end
 
+@inline pointers(x::Tuple{}, e::Entity) = ()
+@inline pointers(x::Tuple, e::Entity) = (pointer(first(x), e), pointers(Base.tail(x), e)...)
+
+Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
+    
 macro entities_in(indices_expr)
     expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
     if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
@@ -228,12 +243,53 @@ macro entities_in(indices_expr)
             else
                 shortest = t_shortest
             end
-            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr))
+            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr), (t_comps..., t_or_comps...,))
         end)
     end
 end
 
-Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
+function propagate_ledger(l, expr)
+    if expr isa Symbol || expr.head == :curly
+        return :($l[$expr])
+    else
+        expr.args[1] = propagate_ledger(l, expr.args[1])
+        expr.args[2] = propagate_ledger(l, expr.args[2])
+        return expr
+    end
+end
+
+macro entities_in(ledger, indices_expr)
+    t = propagate_ledger(ledger, indices_expr)
+    expr, t_sets, t_orsets = expand_indices_bool(t)
+    if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
+        return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])))))
+    else
+        return esc(quote
+            t_comps = $(Expr(:tuple, t_sets...))
+            t_or_comps = $(Expr(:tuple, t_orsets...))
+            sets = map(Overseer.indices_iterator, t_comps)
+            orsets = map(Overseer.indices_iterator, t_or_comps)
+            if isempty(sets)
+                minlen, minid = findmin(map(length, orsets))
+                t_shortest = orsets[minid]
+            else
+                minlen, minid = findmin(map(length, sets))
+                t_shortest = sets[minid]
+            end
+            if $(!isempty(t_orsets))
+                shortest = deepcopy(t_shortest)
+                for s in orsets
+                    union!(shortest, s)
+                end
+            else
+                shortest = t_shortest
+            end
+            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr), (t_comps..., t_or_comps...,))
+        end)
+    end
+end    
+    
+
 
 function Base.:(==)(c1::C1, c2::C2) where {C1 <: AbstractComponent, C2 <: AbstractComponent}
     if eltype(C1) != eltype(C2) ||length(c1) != length(c2)
