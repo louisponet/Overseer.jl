@@ -192,6 +192,10 @@ end
     id = findfirst(x -> eltype(x) == T, Tup.parameters)
     return :(unsafe_load(@inbounds getindex(t, $id))::T)
 end
+@generated function Base.setindex!(t::Tup, x::T, ::Type{T}) where {Tup <: Tuple, T<:ComponentData}
+    id = findfirst(x -> eltype(x) == T, Tup.parameters)
+    return :(unsafe_store!(getindex(t, $id), x))
+end
 ########################################
 #                                      #
 #            Iteration                 #
