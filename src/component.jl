@@ -261,6 +261,28 @@ end
 macro entities_in(ledger, indices_expr)
     t = propagate_ledger(ledger, indices_expr)
     expr, t_sets, t_orsets = expand_indices_bool(t)
+
+    t_comp_defs = quote
+    end
+    comp_sym_map = Dict()
+    for s in [t_sets; t_orsets]
+        sym = gensym()
+        t_comp_defs = quote
+            $t_comp_defs
+            $sym = $s 
+        end
+        comp_sym_map[s] = sym
+    end
+    t_comp_defs = MacroTools.rmlines(MacroTools.flatten(t_comp_defs))
+    
+    expr = MacroTools.postwalk(expr) do x
+        if x in keys(comp_sym_map)
+            return comp_sym_map[x]
+        else
+            return x
+        end
+    end
+    
     if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
         return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])))))
     else
@@ -284,6 +306,7 @@ macro entities_in(ledger, indices_expr)
             else
                 shortest = t_shortest
             end
+            $t_comp_defs
             Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr), (t_comps..., t_or_comps...,))
         end)
     end
