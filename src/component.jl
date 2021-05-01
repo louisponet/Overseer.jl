@@ -255,32 +255,31 @@ end
 #                            #
 ##############################
 
-function typename(typedef::Expr)
-    if typedef.args[2] isa Symbol
-        return typedef.args[2]
-    elseif typedef.args[2].args[1] isa Symbol
-        return typedef.args[2].args[1]
-    elseif typedef.args[2].args[1].args[1] isa Symbol
-        return typedef.args[2].args[1].args[1]
-    else
-        error("Could not parse type-head from: $typedef")
-    end
-end
-
 function process_typedef(typedef, mod)
-    typedef_ = typedef.args[2] isa LineNumberNode ? typedef.args[3] : typedef # LineNumberNode check handles macros in typedef
-	tn = Overseer.typename(typedef_)
-	if typedef_.args[2] isa Symbol 
-          typedef_.args[2] = Expr(Symbol("<:"), tn, Overseer.ComponentData) 
-    elseif typedef_.args[2].head == Symbol("<:") 
-        if !Base.eval(mod, :($(typedef_.args[2].args[2]) <: Overseer.ComponentData)) 
-            error("Components can only have supertypes which are subtypes of ComponentData.") 
+    global td = nothing
+    MacroTools.postwalk(typedef) do x
+        if @capture(x, struct T_ fields__ end)
+            global td = T
         end
+        x
     end
-    tq = quote
-    	$typedef
+    tn = MacroTools.namify(td)
+    if @capture(td, T_ <: V_)
+        if !Base.eval(mod, :($V <: Overseer.ComponentData)) 
+            error("Components can only have supertypes which are subtypes of ComponentData.")
+        else
+            return typedef, tn
+        end
+    else
+        typedef_ = MacroTools.postwalk(typedef) do x
+            if x == td 
+                return :($x  <: Overseer.ComponentData)
+            else
+                return x
+            end
+        end
+        return typedef_, tn
     end
-	return tq, tn
 end
 
 macro component(typedef)

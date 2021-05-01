@@ -1,4 +1,6 @@
 module Overseer
+    using MacroTools
+    
     abstract type ComponentData end
 
     abstract type AbstractComponent{T<:ComponentData} end
@@ -22,7 +24,7 @@ module Overseer
     include("ledger.jl")
 
     export AbstractLedger, Ledger, System, Stage, Component, SharedComponent, ComponentData, Entity
-    export @component, @shared_component, @component_with_kw, @shared_component_with_kw
+    export @component, @shared_component
     export @entities_in
 
     export update, schedule_delete!, delete_scheduled!, empty_entities!, stage, components, entities, stages
