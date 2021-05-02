@@ -14,6 +14,8 @@ module Overseer
         points towards the fields needed for functionality (see ledger.jl for more info).
     """
     abstract type AbstractLedger end
+    
+    abstract type AbstractEntity end
 
     include("utils.jl")
     include("indices.jl")

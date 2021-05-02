@@ -25,7 +25,7 @@ vector at that index, i.e. generally not the storage linked to the `Entity` with
 """
 struct Component{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
-    data::Vector{T}
+    data   ::Vector{T}
 end
 
 Component{T}() where {T} = Component(Indices(), T[])
@@ -37,8 +37,8 @@ data for different entities. This should be used for very large `ComponentData`.
 """
 struct SharedComponent{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
-    data::Vector{Int} # saves the indices into the shared for each of the entities
-    shared::Vector{T}
+    data   ::Vector{Int} # saves the indices into the shared for each of the entities
+    shared ::Vector{T}
 end
 
 SharedComponent{T}() where {T <: ComponentData} = SharedComponent{T}(Indices(), Int[], T[])
@@ -66,12 +66,12 @@ function Base.permute!(c::AbstractComponent, permvec)
     permute!(c.indices, permvec)
 end
 
-Base.@propagate_inbounds @inline Base.getindex(c::Component, e::Entity) = c.data[c.indices[e.id]]
-Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, e::Entity) = c.shared[c.data[c.indices[e.id]]]
-Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
+Base.@propagate_inbounds @inline Base.getindex(c::Component,       e::AbstractEntity)  = c.data[c.indices[e.id]]
+Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, e::AbstractEntity)  = c.shared[c.data[c.indices[e.id]]]
+Base.@propagate_inbounds @inline Base.getindex(c::Component,       i::Integer) = c.data[i]
 Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) = c.shared[c.data[i]]
 
-@inline function Base.setindex!(c::Component{T}, v::T, e::Entity) where {T}
+@inline function Base.setindex!(c::Component{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
     @boundscheck if !in(e, c)
         push!(c.indices, eid)
@@ -81,7 +81,7 @@ Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) =
     @inbounds c.data[c.indices[eid]] = v
     return v
 end
-@inline function Base.setindex!(c::SharedComponent{T}, v::T, e::Entity) where {T}
+@inline function Base.setindex!(c::SharedComponent{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
     t_shared_id = findfirst(x->x == v, c.shared)
     shared_id = t_shared_id === nothing ? (push!(c.shared, v); length(c.shared)) : t_shared_id
@@ -96,9 +96,9 @@ end
 
 #TODO This is necessary  to support || in @entities_in, do we need that?
 # See below for the code without
-@inline Base.pointer(c::Component{T}, e::Entity) where {T}=
+@inline Base.pointer(c::Component{T}, e::AbstractEntity) where {T}=
     e.id in c.indices ? pointer(c.data, @inbounds c.indices[e.id]) : Ptr{T}()
-@inline Base.pointer(c::SharedComponent{T}, e::Entity) where {T} =
+@inline Base.pointer(c::SharedComponent{T}, e::AbstractEntity) where {T} =
     e.id in c.indices ? pointer(c.shared, @inbounds c.data[c.indices[e.id]]) : Ptr{T}()
 # @inline Base.pointer(c::Component{T}, e::Entity) where {T}=
 #     pointer(c.data, @inbounds c.indices[e.id])
@@ -117,7 +117,7 @@ function Base.empty!(c::SharedComponent)
     return c
 end
 
-function swap_order!(c::AbstractComponent, e1::Entity, e2::Entity)
+function swap_order!(c::AbstractComponent, e1::AbstractEntity, e2::AbstractEntity)
     @boundscheck if !in(e1, c)
         throw(BoundsError(c, e1))
     elseif !in(e2, c)
@@ -129,7 +129,7 @@ function swap_order!(c::AbstractComponent, e1::Entity, e2::Entity)
     end
 end
 
-function pop_indices_data!(c::AbstractComponent, e::Entity)
+function pop_indices_data!(c::AbstractComponent, e::AbstractEntity)
     @boundscheck if !in(e, c)
         throw(BoundsError(c, e))
     end
@@ -144,9 +144,9 @@ function pop_indices_data!(c::AbstractComponent, e::Entity)
     end
 end
 
-Base.pop!(c::Component, e::Entity) = pop_indices_data!(c, e)
+Base.pop!(c::Component, e::AbstractEntity) = pop_indices_data!(c, e)
 
-function Base.pop!(c::SharedComponent, e::Entity)
+function Base.pop!(c::SharedComponent, e::AbstractEntity)
     i = pop_indices_data!(c, e)
     idvec = c.data
     val = c.shared[i]
@@ -239,7 +239,7 @@ Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{Tuple{map(x->Pt
 Base.IteratorSize(i::EntityIterator) = Base.IteratorSize(i.it)
 Base.length(i::EntityIterator) = length(i.it)
 
-struct EntityState{TT<:Tuple}
+struct EntityState{TT<:Tuple} <: AbstractEntity
     e::Entity
     pointers::TT
 end
@@ -254,13 +254,14 @@ end
     return :(e.pointers[$id])
 end
 
-@inline Base.in(e::EntityState, ::AbstractComponent{T}) where {T} = pointer(e, T) != Ptr{T}()
-
-#TODO: Some of this functionality could be more elegant by defining an AbstractEntity, and making both
-#      EntityState and Entity <: AbstractEntity, then property overload EntityState.id = EntityState.e.id
-Base.@propagate_inbounds @inline Base.getindex(c::AbstractComponent, e::EntityState) = c[e.e]
-Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent{T}, x::T, e::EntityState) where {T<:ComponentData} =
-    c[e.e] = x
+@generated function Base.in(e::EntityState{TT}, ::AbstractComponent{T}) where {T,TT}
+    id = findfirst(x -> eltype(x) == T, TT.parameters)
+    if id === nothing
+        return :(false)
+    else
+        return :(e.pointers[$id] != Ptr{T}())
+    end
+end
    
 @inline function Base.iterate(i::EntityIterator, state = 1)
     n = iterate(i.it, state)
