@@ -331,7 +331,10 @@ macro entities_in(ledger, indices_expr)
     t_orsets = map(x -> comp_sym_map[x], t_orsets)
     
     if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-        return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])), ($(t_sets[1]),))))
+        return esc(quote
+            $t_comp_defs
+            Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])), ($(t_sets[1]),))
+        end)
     else
         return esc(quote
             $t_comp_defs
