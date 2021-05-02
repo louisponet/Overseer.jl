@@ -159,11 +159,11 @@ t1[test_entity] = Test3()
 
 @test t1[test_entity] == (m[Test1][test_entity], m[Test2][test_entity], m[Test3][test_entity])
 
-tot = 0
-for e in @entities_in(group(m, Test1, Test2))
-    global tot += 1
-end
-@test tot == length(group(m, Test1, Test2))
+# tot = 0
+# for e in @entities_in(group(m, Test1, Test2))
+#     global tot += 1
+# end
+# @test tot == length(group(m, Test1, Test2))
 
 test_entity = entities(m)[end-1]
 m[test_entity] = Test3(test_entity.id)

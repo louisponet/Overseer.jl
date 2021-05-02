@@ -94,8 +94,16 @@ end
     return v
 end
 
-Base.@propagate_inbounds @inline Base.pointer(c::Component, e::Entity) =
-    pointer(c.data, c.indices[e.id])
+#TODO This is necessary  to support || in @entities_in, do we need that?
+# See below for the code without
+@inline Base.pointer(c::Component{T}, e::Entity) where {T}=
+    e.id in c.indices ? pointer(c.data, @inbounds c.indices[e.id]) : Ptr{T}()
+@inline Base.pointer(c::SharedComponent{T}, e::Entity) where {T} =
+    e.id in c.indices ? pointer(c.shared, @inbounds c.data[c.indices[e.id]]) : Ptr{T}()
+# @inline Base.pointer(c::Component{T}, e::Entity) where {T}=
+#     pointer(c.data, @inbounds c.indices[e.id])
+# @inline Base.pointer(c::SharedComponent{T}, e::Entity) where {T} =
+#     pointer(c.shared, @inbounds c.data[c.indices[e.id]])
 
 function Base.empty!(c::Component)
     empty!(c.indices)
@@ -188,13 +196,34 @@ Base.sortperm(c::SharedComponent) = sortperm(c.data)
     return h
 end
 
+#TODO: These boundchecks etc are to ensure in the case of || in @entities_in nobody is trying to load some
+#      invalid memory. Do we really need ||?
 @generated function Base.getindex(t::Tup, ::Type{T}) where {Tup <: Tuple, T<:ComponentData}
     id = findfirst(x -> eltype(x) == T, Tup.parameters)
-    return :(unsafe_load(@inbounds getindex(t, $id))::T)
+    # return :(unsafe_load(@inbounds getindex(t, $id))::T) # without ||
+    return quote
+        $(Expr(:meta, :inline))
+        $(Expr(:meta, :propagate_inbounds))
+        ptr = getindex(t, $id)
+        @boundscheck if ptr === Ptr{T}()
+            throw(BoundsError(t, T))
+        end
+        unsafe_load(ptr)::T
+    end
 end
+
 @generated function Base.setindex!(t::Tup, x::T, ::Type{T}) where {Tup <: Tuple, T<:ComponentData}
     id = findfirst(x -> eltype(x) == T, Tup.parameters)
-    return :(unsafe_store!(getindex(t, $id), x))
+    # return :(unsafe_store!(@inbounds getindex(t, $id), x)) # without ||
+    return quote
+        $(Expr(:meta, :inline))
+        $(Expr(:meta, :propagate_inbounds))
+        ptr = getindex(t, $id)
+        @boundscheck if ptr === Ptr{T}()
+            throw(BoundsError(t, T))
+        end
+        unsafe_store!(ptr, x)
+    end
 end
 ########################################
 #                                      #
@@ -206,15 +235,38 @@ struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}, TT <: T
     components::TT
 end
 
-Base.eltype(::EntityIterator) = Entity
+Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{Tuple{map(x->Ptr{eltype(x)}, TT.parameters)...}}
 Base.IteratorSize(i::EntityIterator) = Base.IteratorSize(i.it)
 Base.length(i::EntityIterator) = length(i.it)
 
+struct EntityState{TT<:Tuple}
+    e::Entity
+    pointers::TT
+end
+
+@inline Base.getproperty(e::EntityState, f::Symbol) = f == :id ? e.e.id : getfield(e, f)
+
+@inline Base.getindex(e::EntityState, ::Type{T}) where {T} = e.pointers[T]
+@inline Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T} = e.pointers[T] = x
+
+@generated function Base.pointer(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
+    id = findfirst(x -> eltype(x) == T, TT.parameters)
+    return :(e.pointers[$id])
+end
+
+@inline Base.in(e::EntityState, ::AbstractComponent{T}) where {T} = pointer(e, T) != Ptr{T}()
+
+#TODO: Some of this functionality could be more elegant by defining an AbstractEntity, and making both
+#      EntityState and Entity <: AbstractEntity, then property overload EntityState.id = EntityState.e.id
+Base.@propagate_inbounds @inline Base.getindex(c::AbstractComponent, e::EntityState) = c[e.e]
+Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent{T}, x::T, e::EntityState) where {T<:ComponentData} =
+    c[e.e] = x
+   
 @inline function Base.iterate(i::EntityIterator, state = 1)
     n = iterate(i.it, state)
     n === nothing && return n
     e = Entity(n[1])
-    return @inbounds pointers(i.components, e), n[2]
+    return EntityState(e, @inbounds pointers(i.components, e)), n[2]
 end
 
 Base.@propagate_inbounds @inline pointers(x::Tuple{}, e::Entity) = ()
@@ -225,7 +277,7 @@ Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[
 macro entities_in(indices_expr)
     expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
     if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-        return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])))))
+        return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])), ($(t_sets[1]),))))
     else
         return esc(quote
             t_comps = $(Expr(:tuple, t_sets...))
@@ -266,7 +318,6 @@ macro entities_in(ledger, indices_expr)
         comp_sym_map[s] = sym
     end
     t_comp_defs = MacroTools.rmlines(MacroTools.flatten(t_comp_defs))
-    @show t_comp_defs
     
     expr = MacroTools.postwalk(expr) do x
         if x in keys(comp_sym_map)
@@ -279,7 +330,7 @@ macro entities_in(ledger, indices_expr)
     t_orsets = map(x -> comp_sym_map[x], t_orsets)
     
     if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-        return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])))))
+        return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])), ($(t_sets[1]),))))
     else
         return esc(quote
             $t_comp_defs

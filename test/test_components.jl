@@ -147,6 +147,6 @@ swap_order!(c3, Entity(12), Entity(13))
 
     iter = @entities_in(comp1 && comp2)
     es = collect(iter)
-    @test es == [e2]
-    @test eltype(es) == Entity
+    @test getfield.(es, :e) == [e2]
+    @test eltype(es) == Overseer.EntityState{Tuple{Ptr{Test1},Ptr{Test2}}}
 end
