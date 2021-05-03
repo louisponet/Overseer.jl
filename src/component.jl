@@ -268,11 +268,10 @@ function process_typedef(typedef, mod)
         end
     else
         typedef_ = MacroTools.postwalk(typedef) do x
-            if x == td && !MacroTools.isdef(x) 
-                return :($x  <: Overseer.ComponentData)
-            else
-                return x
+            if MacroTools.isexpr(x) && x.head == :struct
+                x.args[2] = :($(x.args[2]) <: Overseer.ComponentData)
             end
+            x
         end
         return typedef_, tn
     end
@@ -281,26 +280,25 @@ end
 macro component(typedef)
 	return esc(Overseer._component(typedef, __module__))
 end
-
 function _component(typedef, mod)
     t = process_typedef(typedef, mod)
-	t1, tn = t 
+	t1, tn = t
 	return quote
 	    $t1
-    	Overseer.component_type(::Type{$tn}) = Overseer.Component
-	end
+        Overseer.component_type(::Type{$tn}) = Overseer.Component
+    end
 end
 
 macro shared_component(typedef)
-	return esc(Overseer._shared_component(typedef, __module__))
+    return esc(Overseer._shared_component(typedef, __module__))
 end
 
 function _shared_component(typedef, mod)
     t = process_typedef(typedef, mod)
-	t1, tn = t 
-	return quote
-	    $t1
-    	Overseer.component_type(::Type{$tn}) = Overseer.SharedComponent
-	end
+    t1, tn = t 
+    return quote
+        $t1
+       	Overseer.component_type(::Type{$tn}) = Overseer.SharedComponent
+    end
 end
 
