@@ -14,10 +14,6 @@ end
 "Can be used to specify the type of component storage to be used for a given `ComponentData`."
 component_type(::Type{<:ComponentData}) = Component
  
-# Used together with the indexing scheme to put stubs in
-# component arrays that lack the components for a particular index.
-struct Stub <: ComponentData end
-
 @inline indices_iterator(a::AbstractComponent) = a.indices
 
 """
@@ -34,8 +30,6 @@ end
 
 Component{T}() where {T} = Component(Indices(), T[])
 
-
-const EMPTY_COMPONENT = Component{Stub}()
 
 """
 A shared component works very much like a normal component except that it tries to not have duplicate
@@ -260,7 +254,7 @@ end
 function process_typedef(typedef, mod)
     global td = nothing
     MacroTools.postwalk(typedef) do x
-        if @capture(x, struct T_ fields__ end)
+        if @capture(x, struct T_ fields__ end | mutable struct T_ fields__ end)
             global td = T
         end
         x
