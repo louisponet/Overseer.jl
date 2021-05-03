@@ -268,7 +268,7 @@ function process_typedef(typedef, mod)
         end
     else
         typedef_ = MacroTools.postwalk(typedef) do x
-            if x == td 
+            if x == td && !MacroTools.isdef(x) 
                 return :($x  <: Overseer.ComponentData)
             else
                 return x
