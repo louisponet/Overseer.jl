@@ -244,14 +244,32 @@ struct EntityState{TT<:Tuple} <: AbstractEntity
     pointers::TT
 end
 
-@inline Base.getproperty(e::EntityState, f::Symbol) = f == :id ? e.e.id : getfield(e, f)
+@generated function Base.getproperty(e::EntityState{TT}, f::Symbol) where {TT}
+    _fieldnames = Symbol[]
+    ex = :(getfield(e, f))
+    ex = Expr(:elseif, :(f === :id), :(return getfield(getfield(e, :e), :id)::Int), ex)
+    for PDT in TT.parameters
+        DT = eltype(PDT)
+        for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
+            if fn in _fieldnames
+                @warn "Field $fn found in multiple components in EntityState $e.\nThe field of the first ComponentData inside the EntityState will be used.\nConsider using entity_state[ComponentData] instead."
+            else
+                push!(_fieldnames, fn)
+                fnq = QuoteNode(fn)
+                ex = Expr(:elseif, :(f === $fnq), :(return getfield(getfield(e, :pointers)[$DT], $fnq)::$ft), ex)
+            end
+        end
+    end
+    ex.head = :if
+    return ex
+end
 
-@inline Base.getindex(e::EntityState, ::Type{T}) where {T} = e.pointers[T]
-@inline Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T} = e.pointers[T] = x
+@inline Base.getindex(e::EntityState, ::Type{T}) where {T} = getfield(e, :pointers)[T]
+@inline Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T} = getfield(e, :pointers)[T] = x
 
 @generated function Base.pointer(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
     id = findfirst(x -> eltype(x) == T, TT.parameters)
-    return :(e.pointers[$id])
+    return :(getfield(e, :pointers)[$id])
 end
 
 @generated function Base.in(e::EntityState{TT}, ::AbstractComponent{T}) where {T,TT}
@@ -259,7 +277,7 @@ end
     if id === nothing
         return :(false)
     else
-        return :(e.pointers[$id] != Ptr{T}())
+        return :(getfield(e, :pointers)[$id] != Ptr{T}())
     end
 end
    
