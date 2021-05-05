@@ -245,16 +245,28 @@ struct EntityState{TT<:Tuple} <: AbstractEntity
 end
 
 @generated function Base.getproperty(e::EntityState{TT}, f::Symbol) where {TT}
-    _fieldnames = Symbol[]
+    fn_to_DT = Dict{Symbol, DataType}()
     ex = :(getfield(e, f))
     ex = Expr(:elseif, :(f === :id), :(return getfield(getfield(e, :e), :id)::Int), ex)
     for PDT in TT.parameters
         DT = eltype(PDT)
         for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
-            if fn in _fieldnames
-                @warn "Field $fn found in multiple components in EntityState $e.\nThe field of the first ComponentData inside the EntityState will be used.\nConsider using entity_state[ComponentData] instead."
+            if haskey(fn_to_DT, fn)
+                fnq = QuoteNode(fn)
+                DT_ = fn_to_DT[fn]
+                ft_ = fieldtype(DT_, fn)
+                ex = MacroTools.postwalk(ex) do x
+                    if @capture(x, return getfield(getfield(e, :pointers)[$DT_], $fnq)::$ft_)
+                        return quote
+                            @warn "Field $f found in multiple components in EntityState $e.\nThe field of the first ComponentData inside the EntityState will be used.\nConsider using entity_state[ComponentData] instead."
+                            return getfield(getfield(e, :pointers)[$DT_], $fnq)::$ft
+                        end
+                    else
+                        return x
+                    end
+                end
             else
-                push!(_fieldnames, fn)
+                fn_to_DT[fn] = DT
                 fnq = QuoteNode(fn)
                 ex = Expr(:elseif, :(f === $fnq), :(return getfield(getfield(e, :pointers)[$DT], $fnq)::$ft), ex)
             end
