@@ -50,10 +50,14 @@ end
 Base.lastindex(s::Indices) = s.packed[end]
 
 @inline function pageid_offset(i)
-    t1 = i - 1
-    pageid = div(t1, INT_PER_PAGE)
-    t2 = t1 & INT_PER_PAGE_1
-    return (id = pageid + 1, offset = t2 + 1)
+    if INT_PER_PAGE & (INT_PER_PAGE - 1) === 0   
+        t1 = i - 1
+        pageid = div(t1, INT_PER_PAGE)
+        t2 = t1 & INT_PER_PAGE_1
+        return (id = pageid + 1, offset = t2 + 1)
+    else
+        return NamedTuple{(:id, :offset)}(divrem(i - 1, INT_PER_PAGE) .+ 1 )
+    end
 end
 
 @inline function Base.in(i, s::Indices)

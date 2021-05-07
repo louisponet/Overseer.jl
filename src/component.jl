@@ -196,35 +196,6 @@ Base.sortperm(c::SharedComponent) = sortperm(c.data)
     return h
 end
 
-#TODO: These boundchecks etc are to ensure in the case of || in @entities_in nobody is trying to load some
-#      invalid memory. Do we really need ||?
-@generated function Base.getindex(t::Tup, ::Type{T}) where {Tup <: Tuple, T<:ComponentData}
-    id = findfirst(x -> eltype(x) == T, Tup.parameters)
-    # return :(unsafe_load(@inbounds getindex(t, $id))::T) # without ||
-    return quote
-        $(Expr(:meta, :inline))
-        $(Expr(:meta, :propagate_inbounds))
-        ptr = getindex(t, $id)
-        @boundscheck if ptr === Ptr{T}()
-            throw(BoundsError(t, T))
-        end
-        unsafe_load(ptr)::T
-    end
-end
-
-@generated function Base.setindex!(t::Tup, x::T, ::Type{T}) where {Tup <: Tuple, T<:ComponentData}
-    id = findfirst(x -> eltype(x) == T, Tup.parameters)
-    # return :(unsafe_store!(@inbounds getindex(t, $id), x)) # without ||
-    return quote
-        $(Expr(:meta, :inline))
-        $(Expr(:meta, :propagate_inbounds))
-        ptr = getindex(t, $id)
-        @boundscheck if ptr === Ptr{T}()
-            throw(BoundsError(t, T))
-        end
-        unsafe_store!(ptr, x)
-    end
-end
 ########################################
 #                                      #
 #            Iteration                 #
@@ -235,7 +206,11 @@ struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}, TT <: T
     components::TT
 end
 
-Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{Tuple{map(x->Ptr{eltype(x)}, TT.parameters)...}}
+@generated function Base.eltype(::EntityIterator{T, TT}) where {T, TT}
+    t = map(x->Ptr{eltype(x)}, TT.parameters)
+    return :(EntityState{Tuple{$t...}})
+end
+    
 Base.IteratorSize(i::EntityIterator) = Base.IteratorSize(i.it)
 Base.length(i::EntityIterator) = length(i.it)
 
@@ -256,10 +231,9 @@ end
                 DT_ = fn_to_DT[fn]
                 ft_ = fieldtype(DT_, fn)
                 ex = MacroTools.postwalk(ex) do x
-                    if @capture(x, return getfield(getfield(e, :pointers)[$DT_], $fnq)::$ft_)
+                    if @capture(x, return getfield(e[$DT_], $fnq)::$ft_)
                         return quote
-                            @warn "Field $f found in multiple components in EntityState $e.\nThe field of the first ComponentData inside the EntityState will be used.\nConsider using entity_state[ComponentData] instead."
-                            return getfield(getfield(e, :pointers)[$DT_], $fnq)::$ft
+                            throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
                         end
                     else
                         return x
@@ -268,7 +242,7 @@ end
             else
                 fn_to_DT[fn] = DT
                 fnq = QuoteNode(fn)
-                ex = Expr(:elseif, :(f === $fnq), :(return getfield(getfield(e, :pointers)[$DT], $fnq)::$ft), ex)
+                ex = Expr(:elseif, :(f === $fnq), :(return getfield(e[$DT], $fnq)::$ft), ex)
             end
         end
     end
@@ -276,8 +250,35 @@ end
     return ex
 end
 
-@inline Base.getindex(e::EntityState, ::Type{T}) where {T} = getfield(e, :pointers)[T]
-@inline Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T} = getfield(e, :pointers)[T] = x
+#TODO: These boundchecks etc are to ensure in the case of || in @entities_in nobody is trying to load some
+#      invalid memory. Do we really need ||?
+#      diff in benchmarks is 47.8 vs 48.2 mus
+#      Solution, have Ptr and MaybePtr so that the boundscheck can be done at compile time,
+#      or have a different iterator for || vs && 
+
+@generated function Base.getindex(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
+    id = findfirst(x -> eltype(x) == T, TT.parameters)
+    # return :(unsafe_load(getindex(getfield(e, :pointers), $id))::T)
+    return quote
+        ptr = getindex(getfield(e, :pointers), $id)
+        if ptr === Ptr{T}()
+            throw(error("$e does not have ComponentData $T"))
+        end
+        unsafe_load(ptr)::T
+    end
+end
+
+@generated function Base.setindex!(e::EntityState{TT}, x::T, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
+    id = findfirst(x -> eltype(x) == T, TT.parameters)
+    # return :(unsafe_store!(getindex(getfield(e, :pointers), $id), x)) # without ||
+    return quote
+        ptr = getindex(getfield(e, :pointers), $id)
+        if ptr === Ptr{T}()
+            throw(error("$e does not have ComponentData $T"))
+        end
+        unsafe_store!(ptr, x)
+    end
+end
 
 @generated function Base.pointer(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
     id = findfirst(x -> eltype(x) == T, TT.parameters)
