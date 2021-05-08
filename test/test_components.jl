@@ -150,3 +150,57 @@ swap_order!(c3, Entity(12), Entity(13))
     @test es == [e2]
     @test eltype(es) == Entity
 end
+
+
+@testset "GroupedComponent" begin
+    @grouped_component struct Test5
+        x::Int
+    end
+
+    @test Overseer.component_type(Test5) == Overseer.GroupedComponent
+    c5 = Overseer.component_type(Test5){Test5}()
+
+    p1 = Entity(1)
+    p2 = Entity(2)
+    c5[p1] = Test5(1)
+    c5[p2] = Test5(2)
+
+    entities = [Entity(i) for i in 3:10]
+    for (i, e) in enumerate(entities)
+        c5[e] = (p1, p2)[mod1(i, 2)]
+    end
+
+    count = 0
+    _sum = 0
+    for e in @entities_in(c5)
+        count += 1
+        _sum += c5[e].x
+    end
+    @test count == 10
+    @test _sum == 15
+
+    @test p1 in c5
+    @test pop!(c5, p1) == Test5(1)
+    @test !(p1 in c5)
+    @test length(c5) == 9
+    @test c5[p2] == Test5(2)
+    @test !isempty(c5)
+
+    count = 0
+    _sum = 0
+    for e in @entities_in(c5)
+        count += 1
+        _sum += c5[e].x
+    end
+    @test count == 9
+    @test _sum == 14
+
+    for i in 3:2:10
+        pop!(c5, Entity(i))
+    end
+    @test length(c5.data) == 1
+    @test length(c5) == 5
+
+    empty!(c5)
+    @test isempty(c5)
+end

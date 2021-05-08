@@ -302,3 +302,108 @@ function _shared_component(typedef, mod)
     end
 end
 
+
+################################################################################
+
+
+struct GroupedComponent{T <: ComponentData} <: AbstractComponent{T}
+    indices::Indices
+    group::Vector{Int}
+    data::Vector{T}
+end
+
+GroupedComponent{T}() where {T <: ComponentData} = GroupedComponent{T}(Indices(), Int[], T[])
+
+Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, e::Entity) = c.data[c.group[c.indices[e.id]]]
+Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, i::Integer) = c.data[c.group[i]]
+
+@inline function Base.setindex!(c::GroupedComponent{T}, v::T, e::Entity) where {T}
+    eid = e.id
+    @boundscheck if !in(e, c)
+        push!(c.indices, eid)
+        push!(c.group, length(c.group)+1)
+        push!(c.data, v)
+        return v
+    end
+    @inbounds c.data[c.group[c.indices[eid]]] = v
+    return v
+end
+
+@inline function Base.setindex!(c::GroupedComponent, p::Entity, e::Entity)
+    @boundscheck if !in(p, c)
+        error("Parent entity $p does not have component $(eltype(c)).")
+    end
+    eid = e.id
+    @boundscheck if !in(e, c)
+        push!(c.indices, eid)
+        push!(c.group, c.group[c.indices[p.id]])
+        return c.data[c.group[c.indices[eid]]] 
+    end
+    @inbounds c.data[c.group[c.indices[eid]]] = v
+    return v
+end
+
+Base.length(c::GroupedComponent) = length(c.group)
+
+function Base.empty!(c::GroupedComponent)
+    empty!(c.indices)
+    empty!(c.group)
+    empty!(c.data)
+    return c
+end
+
+function Base.pop!(c::GroupedComponent, e::Entity)
+    @boundscheck if !in(e, c)
+        throw(BoundsError(c, e))
+    end
+
+    @inbounds begin
+        id = c.indices[e.id]
+        g = c.group[id]
+
+        c.group[id] = c.group[end]
+        pop!(c.group)
+        pop!(c.indices, e.id)
+
+        val = c.data[g]
+
+        if !in(g, c.group)
+            deleteat!(c.data, g)
+            for i in eachindex(c.group)
+                if c.group[i] > g
+                    c.group[i] -= 1
+                end
+            end
+        end
+    end
+
+    return val
+end
+
+@inline Base.iterate(c::GroupedComponent, args...) = iterate(c.data, args...)
+Base.sortperm(c::GroupedComponent) = sortperm(c.group)
+
+
+macro grouped_component(typedef)
+    return esc(Overseer._grouped_component(typedef, __module__))
+end
+
+function _grouped_component(typedef, mod)
+    t = process_typedef(typedef, mod)
+    t1, tn = t 
+    return quote
+        $t1
+       	Overseer.component_type(::Type{$tn}) = Overseer.GroupedComponent
+    end
+end
+
+# Should be fine
+# eltype
+# in
+# isempty
+# delete! - fine if pop! is fine?
+
+# Maybe not fine
+# length - should this be the data length or the number of entities?
+# swap_order!
+# pop_indices_data!
