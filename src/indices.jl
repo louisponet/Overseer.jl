@@ -260,7 +260,7 @@ Base.IteratorSize(::IndicesIterator) = Base.SizeUnknown()
 @inline function Base.iterate(it::IndicesIterator, state=1)
     it_length = length(it.shortest)
     for i=state:it_length
-        id = indices(it.shortest).packed[i]
+        @inbounds id = indices(it.shortest).packed[i]
         if it.test(id)
             return id, i+1
         end

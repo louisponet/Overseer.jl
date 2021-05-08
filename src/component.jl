@@ -96,10 +96,29 @@ end
 
 #TODO This is necessary  to support || in @entities_in, do we need that?
 # See below for the code without
-@inline Base.pointer(c::Component{T}, e::AbstractEntity) where {T}=
-    e.id in c.indices ? pointer(c.data, @inbounds c.indices[e.id]) : Ptr{T}()
-@inline Base.pointer(c::SharedComponent{T}, e::AbstractEntity) where {T} =
-    e.id in c.indices ? pointer(c.shared, @inbounds c.data[c.indices[e.id]]) : Ptr{T}()
+@inline function Base.pointer(c::Component{T}, e::AbstractEntity) where {T}
+    if e.id in c.indices
+        if T.mutable
+            unsafe_load(reinterpret(Ptr{Ptr{T}}, pointer(c.data, @inbounds c.indices[e.id])))
+        else
+            return pointer(c.data, @inbounds c.indices[e.id])
+        end
+    else
+        return Ptr{T}()
+    end
+end
+        
+@inline function Base.pointer(c::SharedComponent{T}, e::AbstractEntity) where {T}
+    if e.id in c.indices
+        if T.mutable
+            unsafe_load(reinterpret(Ptr{Ptr{T}}, pointer(c.shared, @inbounds c.data[c.indices[e.id]])))
+        else
+            return pointer(c.shared, @inbounds c.data[c.indices[e.id]])
+        end
+    else
+        return Ptr{T}()
+    end
+end
 # @inline Base.pointer(c::Component{T}, e::Entity) where {T}=
 #     pointer(c.data, @inbounds c.indices[e.id])
 # @inline Base.pointer(c::SharedComponent{T}, e::Entity) where {T} =
@@ -219,6 +238,7 @@ struct EntityState{TT<:Tuple} <: AbstractEntity
     pointers::TT
 end
 
+# TODO: Cleanup, can these two be merged?
 @generated function Base.getproperty(e::EntityState{TT}, f::Symbol) where {TT}
     fn_to_DT = Dict{Symbol, DataType}()
     ex = :(getfield(e, f))
@@ -250,40 +270,70 @@ end
     return ex
 end
 
-#TODO: These boundchecks etc are to ensure in the case of || in @entities_in nobody is trying to load some
-#      invalid memory. Do we really need ||?
-#      diff in benchmarks is 47.8 vs 48.2 mus
-#      Solution, have Ptr and MaybePtr so that the boundscheck can be done at compile time,
-#      or have a different iterator for || vs && 
-
-@generated function Base.getindex(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
-    id = findfirst(x -> eltype(x) == T, TT.parameters)
-    # return :(unsafe_load(getindex(getfield(e, :pointers), $id))::T)
-    return quote
-        ptr = getindex(getfield(e, :pointers), $id)
-        if ptr === Ptr{T}()
-            throw(error("$e does not have ComponentData $T"))
+@generated function Base.setproperty!(e::EntityState{TT}, f::Symbol, val) where {TT}
+    fn_to_DT = Dict{Symbol, DataType}()
+    ex = :(getfield(e, f))
+    ex = Expr(:elseif, :(f === :id), :(return setfield!(getfield(e, :e), :id)::Int, val), ex)
+    for PDT in TT.parameters
+        DT = eltype(PDT)
+        for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
+            if haskey(fn_to_DT, fn)
+                fnq = QuoteNode(fn)
+                DT_ = fn_to_DT[fn]
+                ft_ = fieldtype(DT_, fn)
+                ex = MacroTools.postwalk(ex) do x
+                    if @capture(x, setfield!(t, $fnq, val))
+                        return quote
+                            throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
+                        end
+                    else
+                        return x
+                    end
+                end
+            else
+                fn_to_DT[fn] = DT
+                fnq = QuoteNode(fn)
+                tex = quote
+                    ptr = valid_pointer(e, $DT)
+                    t = Base.unsafe_pointer_to_objref(ptr)
+                    setfield!(t, $fnq, val)
+                end
+                    
+                ex = Expr(:elseif, :(f === $fnq), tex, ex)
+            end
         end
-        unsafe_load(ptr)::T
     end
-end
-
-@generated function Base.setindex!(e::EntityState{TT}, x::T, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
-    id = findfirst(x -> eltype(x) == T, TT.parameters)
-    # return :(unsafe_store!(getindex(getfield(e, :pointers), $id), x)) # without ||
-    return quote
-        ptr = getindex(getfield(e, :pointers), $id)
-        if ptr === Ptr{T}()
-            throw(error("$e does not have ComponentData $T"))
-        end
-        unsafe_store!(ptr, x)
-    end
+    ex.head = :if
+    return ex
 end
 
 @generated function Base.pointer(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
     id = findfirst(x -> eltype(x) == T, TT.parameters)
     return :(getfield(e, :pointers)[$id])
 end
+
+#TODO: These boundchecks etc are to ensure in the case of || in @entities_in nobody is trying to load some
+#      invalid memory. Do we really need ||?
+#      diff in benchmarks is 47.8 vs 48.2 mus
+#      Solution, have Ptr and MaybePtr so that the boundscheck can be done at compile time,
+#      or have a different iterator for || vs &&
+
+@inline function valid_pointer(e::EntityState, ::Type{T}) where {T<:ComponentData}
+    ptr = pointer(e, T)
+    if ptr === Ptr{T}()
+        throw(error("$e does not have ComponentData $T"))
+    end
+    return ptr
+end
+
+Base.@propagate_inbounds @inline pointers(x::Tuple{}, e::Entity) = ()
+Base.@propagate_inbounds @inline pointers(x::Tuple, e::Entity) = (pointer(first(x), e), pointers(Base.tail(x), e)...)
+
+Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData} =
+        T.mutable ? Base.unsafe_pointer_to_objref(valid_pointer(e, T))::T : unsafe_load(valid_pointer(e, T))::T
+
+Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData} =
+    unsafe_store!(valid_pointer(e, T), x)
 
 @generated function Base.in(e::EntityState{TT}, ::AbstractComponent{T}) where {T,TT}
     id = findfirst(x -> eltype(x) == T, TT.parameters)
@@ -300,9 +350,6 @@ end
     e = Entity(n[1])
     return EntityState(e, @inbounds pointers(i.components, e)), n[2]
 end
-
-Base.@propagate_inbounds @inline pointers(x::Tuple{}, e::Entity) = ()
-Base.@propagate_inbounds @inline pointers(x::Tuple, e::Entity) = (pointer(first(x), e), pointers(Base.tail(x), e)...)
 
 Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
     

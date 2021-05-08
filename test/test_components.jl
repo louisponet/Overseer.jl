@@ -166,6 +166,51 @@ end
     @test c3.indices[12] == orig_id2
 end
 
+@component @with_kw struct Spatial_t
+    position::NTuple{3, Float64} = (1.0,1.0,1.0)
+end
+@component struct Spring_t
+    center::NTuple{3, Float64}
+end
+
+@component struct Spatial1_t
+    position::NTuple{3, Float64}
+end
+
+@component mutable struct Spatial2_t
+    position::NTuple{3, Float64}
+end
+
+@testset "iteration syntax" begin
+    m = Ledger()
+    for i = 1:5
+        Entity(m, Spatial_t(), Spring_t((i, 1.0, 2.0)), Spatial1_t((3.0, 1.0, 2.0)), Spatial2_t((1.0, 1.0, 1.0)))
+    end
+    for e in @entities_in(m, Spatial_t && Spring_t)
+        e[Spatial_t] = Spatial_t(e.position .+ e.center)
+    end
+    @test m[Spatial_t][Entity(1)].position == (2.0, 2.0, 3.0)
+    for e in @entities_in(m, Spatial_t && Spatial1_t)
+        e[Spatial_t] = Spatial_t(e[Spatial_t].position .+ e[Spatial1_t].position)
+    end
+    @test m[Spatial_t][Entity(1)].position ==  (5.0, 3.0, 5.0)
+    @test_throws ErrorException begin
+        for e in @entities_in(m, Spatial_t && Spatial1_t)
+            e[Spatial_t] = Spatial_t(e.position .+ e[Spatial1_t].position)
+        end
+    end
+    for e in @entities_in(m, Spatial2_t )
+        e.position = 2 .* e.position
+    end
+    @test m[Spatial2_t][Entity(1)].position == (2.0, 2.0, 2.0)
+    
+    for e in @entities_in(m, Spatial2_t )
+        t = e[Spatial2_t]
+        t.position = (0.0,0.0,0.0)
+    end
+    @test m[Spatial2_t][Entity(1)].position == (0.0, 0.0, 0.0)
+     
+end
 # Issue 4: collect() and iterator length
 @testset "collect" begin
     e1 = Entity(1)

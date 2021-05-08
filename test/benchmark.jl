@@ -108,11 +108,11 @@ function update_new(::Rotator, m::AbstractLedger)
 	dt = 0.01
 	@inbounds for e in @entities_in(m, Rotation && Spatial) 
 		n          = e.axis
-		r          = e.position .- e[Rotation].center 
+		r          = e.position .- e.center 
 		theta      = e.omega * dt
 		nnd        = n .* sum(n .* r)
 		t = (r[2] * n[3] - r[3] * n[2], r[3]*n[1] - r[1] * n[3] , r[1] * n[2] - r[2] * n[1])
-		e[Spatial] = Spatial(e[Rotation].center .+ nnd .+ (r .- nnd) .* cos(theta) .+ t .* sin(theta), e.velocity)
+		e[Spatial] = Spatial(e.center .+ nnd .+ (r .- nnd) .* cos(theta) .+ t .* sin(theta), e.velocity)
 	end
 end
 
