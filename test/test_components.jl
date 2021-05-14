@@ -170,6 +170,7 @@ end
         c5[e] = (p1, p2)[mod1(i, 2)]
     end
 
+    # check created values
     count = 0
     _sum = 0
     for e in @entities_in(c5)
@@ -179,6 +180,10 @@ end
     @test count == 10
     @test _sum == 15
 
+    # check for no duplication
+    @test length(c5.data) == 2
+
+    # Check some basics
     @test p1 in c5
     @test pop!(c5, p1) == Test5(1)
     @test !(p1 in c5)
@@ -195,10 +200,34 @@ end
     @test count == 9
     @test _sum == 14
 
+    # adjust parent value of group
+    c5[Overseer.ParentGroup(p2)] = Test5(1)
+    count = 0
+    _sum = 0
+    for e in @entities_in(c5)
+        count += 1
+        _sum += c5[e].x
+    end
+    @test count == 9
+    @test _sum == 9
+
+    # adjust single value
+    c5[p2] = Test5(3)
+    count = 0
+    _sum = 0
+    for e in @entities_in(c5)
+        count += 1
+        _sum += c5[e].x
+    end
+    @test count == 9
+    @test _sum == 11
+    @test length(c5.data) == 3
+
+    # remove all entites of a group
     for i in 3:2:10
         pop!(c5, Entity(i))
     end
-    @test length(c5.data) == 1
+    @test length(c5.data) == 2
     @test length(c5) == 5
 
     empty!(c5)

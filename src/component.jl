@@ -305,6 +305,9 @@ end
 
 ################################################################################
 
+struct ParentGroup
+    e::Entity
+end
 
 struct GroupedComponent{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
@@ -317,31 +320,76 @@ GroupedComponent{T}() where {T <: ComponentData} = GroupedComponent{T}(Indices()
 Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, e::Entity) = c.data[c.group[c.indices[e.id]]]
 Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, i::Integer) = c.data[c.group[i]]
 
+function is_unique_in(value, collection)
+    count = 0
+    for element in collection
+        count += element == value
+    end
+    return count == 1
+end
+
+
+# c[entity] = value
+# set value of <only> this entity
 @inline function Base.setindex!(c::GroupedComponent{T}, v::T, e::Entity) where {T}
     eid = e.id
-    @boundscheck if !in(e, c)
+    if in(e, c)
+        if is_unique_in(c.group[c.indices[eid]], c.group)
+            # the entity already has its own group - adjust value
+            @inbounds c.data[c.group[c.indices[eid]]] = v
+        else
+            # the entity is part of a group - create a new one
+            push!(c.data, v)
+            @inbounds c.group[c.indices[eid]] = length(c.data)
+        end
+    else
+        # the entity is not in the component - add it
         push!(c.indices, eid)
         push!(c.group, length(c.group)+1)
         push!(c.data, v)
-        return v
     end
-    @inbounds c.data[c.group[c.indices[eid]]] = v
     return v
 end
 
+# c[entity] = parent
+# set the value of this entity to that of parent
 @inline function Base.setindex!(c::GroupedComponent, p::Entity, e::Entity)
     @boundscheck if !in(p, c)
-        error("Parent entity $p does not have component $(eltype(c)).")
+        throw(BoundsError(c, p))
     end
     eid = e.id
-    @boundscheck if !in(e, c)
+    if in(e, c)
+        if is_unique_in(c.group[c.indices[eid]], c.group)
+            # if this entity is the only one holding onto a value, remove that 
+            # value and cleanup group indices
+            idx = c.group[c.indices[eid]]
+            deleteat!(c.data, idx)
+            for i in eachindex(c.group)
+                c.group[i] = c.group[i] - (c.group[i] > idx)
+            end
+        end
+        # adjust group index either way
+        c.group[c.indices[eid]] = c.group[c.indices][p.id]
+    else
+        # if the entity is not in there we have to add it
         push!(c.indices, eid)
         push!(c.group, c.group[c.indices[p.id]])
-        return c.data[c.group[c.indices[eid]]] 
     end
-    @inbounds c.data[c.group[c.indices[eid]]] = v
+
+    return c[p]
+end
+
+# c[ParentGroup(entity)] = value
+# set the value for all entities grouped with entity
+@inline function Base.setindex!(c::GroupedComponent{T}, v::T, pg::ParentGroup) where {T}
+    e = pg.e
+    @boundscheck if !in(e, c)
+        throw(BoundsError(c, e))
+    end
+    @inbounds c.data[c.group[c.indices[e.id]]] = v
     return v
 end
+
 
 Base.length(c::GroupedComponent) = length(c.group)
 
@@ -351,6 +399,7 @@ function Base.empty!(c::GroupedComponent)
     empty!(c.data)
     return c
 end
+
 
 function Base.pop!(c::GroupedComponent, e::Entity)
     @boundscheck if !in(e, c)
