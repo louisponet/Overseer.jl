@@ -312,10 +312,11 @@ end
 struct GroupedComponent{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
     group::Vector{Int}
+    group_size::Vector{Int}
     data::Vector{T}
 end
 
-GroupedComponent{T}() where {T <: ComponentData} = GroupedComponent{T}(Indices(), Int[], T[])
+GroupedComponent{T}() where {T <: ComponentData} = GroupedComponent{T}(Indices(), Int[], Int[], T[])
 
 Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, e::Entity) = c.data[c.group[c.indices[e.id]]]
 Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, i::Integer) = c.data[c.group[i]]
@@ -333,19 +334,23 @@ end
 # set value of <only> this entity
 @inline function Base.setindex!(c::GroupedComponent{T}, v::T, e::Entity) where {T}
     eid = e.id
-    if in(e, c)
-        if is_unique_in(c.group[c.indices[eid]], c.group)
+    @inbounds if in(e, c)
+        g = c.group[c.indices[eid]]
+        if c.group_size[g] == 1 #is_unique_in(c.group[c.indices[eid]], c.group)
             # the entity already has its own group - adjust value
-            @inbounds c.data[c.group[c.indices[eid]]] = v
+            c.data[g] = v
         else
             # the entity is part of a group - create a new one
+            c.group_size[g] -= 1
             push!(c.data, v)
-            @inbounds c.group[c.indices[eid]] = length(c.data)
+            push!(c.group_size, 1)
+            c.group[c.indices[eid]] = length(c.data)
         end
     else
         # the entity is not in the component - add it
         push!(c.indices, eid)
         push!(c.group, length(c.group)+1)
+        push!(c.group_size, 1)
         push!(c.data, v)
     end
     return v
@@ -357,24 +362,29 @@ end
     @boundscheck if !in(p, c)
         throw(BoundsError(c, p))
     end
-    eid = e.id
+    pg = c.group[c.indices[p.id]]
     if in(e, c)
-        if is_unique_in(c.group[c.indices[eid]], c.group)
+        eg = c.group[c.indices[e.id]]
+        if c.group_size[eg] == 1 #is_unique_in(c.group[c.indices[eid]], c.group)
             # if this entity is the only one holding onto a value, remove that 
             # value and cleanup group indices
-            idx = c.group[c.indices[eid]]
             deleteat!(c.data, idx)
+            deleteat!(c.group_size, idx)
             for i in eachindex(c.group)
-                c.group[i] = c.group[i] - (c.group[i] > idx)
+                c.group[i] = c.group[i] - (c.group[i] > eg)
             end
+        else
+            c.group_size[eg] -= 1
         end
         # adjust group index either way
-        c.group[c.indices[eid]] = c.group[c.indices][p.id]
+        c.group[c.indices[e.id]] = pg
     else
         # if the entity is not in there we have to add it
-        push!(c.indices, eid)
+        push!(c.indices, e.id)
         push!(c.group, c.group[c.indices[p.id]])
+        push!(c.group_size, c.group[c.indices[p.id]])
     end
+    c.group_size[pg] += 1
 
     return c[p]
 end
