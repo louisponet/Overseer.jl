@@ -382,7 +382,6 @@ end
         # if the entity is not in there we have to add it
         push!(c.indices, e.id)
         push!(c.group, c.group[c.indices[p.id]])
-        push!(c.group_size, c.group[c.indices[p.id]])
     end
     c.group_size[pg] += 1
 
@@ -406,6 +405,7 @@ Base.length(c::GroupedComponent) = length(c.group)
 function Base.empty!(c::GroupedComponent)
     empty!(c.indices)
     empty!(c.group)
+    empty!(c.group_size)
     empty!(c.data)
     return c
 end
@@ -421,13 +421,15 @@ function Base.pop!(c::GroupedComponent, e::Entity)
         g = c.group[id]
 
         c.group[id] = c.group[end]
+        c.group_size[g] -= 1
         pop!(c.group)
         pop!(c.indices, e.id)
 
         val = c.data[g]
 
-        if !in(g, c.group)
+        if c.group_size[g] == 0
             deleteat!(c.data, g)
+            deleteat!(c.group_size, g)
             for i in eachindex(c.group)
                 if c.group[i] > g
                     c.group[i] -= 1
@@ -456,13 +458,43 @@ function _grouped_component(typedef, mod)
     end
 end
 
-# Should be fine
-# eltype
-# in
-# isempty
-# delete! - fine if pop! is fine?
+function make_unique!(c::GroupedComponent)
+    # Find all duplicates
+    for i in eachindex(c.group)
+        g0 = c.group[i]
+        if c.group_size[g0] > 0
+            v0 = c.data[g0]
+            for j in i+1:length(c.group)
+                g = c.group[j]
+                if c.group_size[g] > 0 && c.data[g] == v0
+                    c.group_size[g] -= 1
+                    c.group_size[g0] += 1
+                    c.group[j] = g0
+                end
+            end
+        end
+    end
 
-# Maybe not fine
-# length - should this be the data length or the number of entities?
-# swap_order!
-# pop_indices_data!
+    # remove duplicates
+    i = 1
+    while i <= length(c.group_size)
+        if c.group_size[i] == 0
+            if i == length(c.group_size)
+                pop!(c.group_size)
+                pop!(c.data)
+                break
+            else
+                N = length(c.group_size)
+                c.group_size[i] = pop!(c.group_size)
+                c.data[i] = pop!(c.data)
+                for j in eachindex(c.group)
+                    c.group[j] = c.group[j] == N ? i : c.group[j]
+                end
+            end
+        else
+            i += 1
+        end
+    end
+
+    return
+end
