@@ -203,7 +203,7 @@ end
     @test _sum == 14
 
     # adjust parent value of group
-    c5[Overseer.ParentGroup(p2)] = Test5(1)
+    c5[parent(p2)] = Test5(1)
     count = 0
     _sum = 0
     for e in @entities_in(c5)

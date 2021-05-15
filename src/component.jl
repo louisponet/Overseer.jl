@@ -305,9 +305,11 @@ end
 
 ################################################################################
 
-struct ParentGroup
+struct ApplyToGroup
     e::Entity
 end
+
+Base.parent(e::Entity) = ApplyToGroup(e)
 
 struct GroupedComponent{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
@@ -390,8 +392,8 @@ end
 
 # c[ParentGroup(entity)] = value
 # set the value for all entities grouped with entity
-@inline function Base.setindex!(c::GroupedComponent{T}, v::T, pg::ParentGroup) where {T}
-    e = pg.e
+@inline function Base.setindex!(c::GroupedComponent{T}, v::T, x::ApplyToGroup) where {T}
+    e = x.e
     @boundscheck if !in(e, c)
         throw(BoundsError(c, e))
     end
