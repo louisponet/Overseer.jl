@@ -1,5 +1,6 @@
 #Almost exact copy of the sparse_int_set in DataStructures.jl
 const INT_PER_PAGE = div(ccall(:jl_getpagesize, Clong, ()), sizeof(Int))
+const INT_PER_PAGE_1 = INT_PER_PAGE - 1
 # we use this to mark pages not in use, it must never be written to.
 const NULL_INT_PAGE = Vector{Int}()
 
@@ -48,45 +49,53 @@ end
 
 Base.lastindex(s::Indices) = s.packed[end]
 
-function pageid_offset(s::Indices, i)
-    pageid = div(i - 1, INT_PER_PAGE) + 1
-    return (id = pageid, offset = (i - 1) & (INT_PER_PAGE - 1) + 1)
+@inline function pageid_offset(i)
+    if INT_PER_PAGE & (INT_PER_PAGE - 1) === 0   
+        t1 = i - 1
+        pageid = div(t1, INT_PER_PAGE)
+        t2 = t1 & INT_PER_PAGE_1
+        return (id = pageid + 1, offset = t2 + 1)
+    else
+        return NamedTuple{(:id, :offset)}(divrem(i - 1, INT_PER_PAGE) .+ 1 )
+    end
 end
 
 @inline function Base.in(i, s::Indices)
-    pageid, offset = pageid_offset(s, i)
-    if pageid > length(s.reverse)
+    pageid, offset = pageid_offset(i)
+    rev = s.reverse
+    if pageid > length(rev)
         return false
     else
-        page = @inbounds s.reverse[pageid]
-        return page !== NULL_INT_PAGE &&  @inbounds page[offset] != 0
+        page = @inbounds rev[pageid]
+        return page !== NULL_INT_PAGE && @inbounds page[offset] != 0
     end
 end
 
 Base.length(s::Indices) = length(s.packed)
 
-@inline function Base.getindex(s::Indices, p::Page)
-    @boundscheck if p.id > length(s.reverse)
+Base.@propagate_inbounds @inline function Base.getindex(s::Indices, p::Page)
+    id, offset = p
+    @boundscheck if id > length(s.reverse)
         throw(BoundsError(s, p))
     end
-    page = @inbounds s.reverse[p.id]
+    page = @inbounds s.reverse[id]
 
     @boundscheck if page === NULL_INT_PAGE
         throw(BoundsError(s, p))
     end
-    id = @inbounds page[p.offset]
-    @boundscheck if id === 0
+    i = @inbounds page[offset]
+    @boundscheck if i === 0
         throw(BoundsError(s, p))
     end
-    return id 
+    return i 
 end
 
-@inline Base.getindex(s::Indices, i::Integer) = getindex(s, pageid_offset(s, i))
+Base.@propagate_inbounds @inline Base.getindex(s::Indices, i::Integer) = getindex(s, pageid_offset(i))
 
 @inline function Base.push!(s::Indices, i::Integer)
     i <= 0 && throw(DomainError("Only positive Ints allowed."))
 
-    pageid, offset = pageid_offset(s, i)
+    pageid, offset = pageid_offset(i)
     pages = s.reverse
     plen = length(pages)
 
@@ -126,7 +135,7 @@ end
         throw(ArgumentError("Cannot pop an empty set."))
     end
     id = pop!(s.packed)
-    pageid, offset = pageid_offset(s, id)
+    pageid, offset = pageid_offset(id)
     @inbounds s.reverse[pageid][offset] = 0
     @inbounds s.counters[pageid] -= 1
     cleanup!(s, pageid)
@@ -141,8 +150,8 @@ end
     end
     @inbounds begin
         packed_endid = s.packed[end]
-        from_page, from_offset = pageid_offset(s, id)
-        to_page, to_offset = pageid_offset(s, packed_endid)
+        from_page, from_offset = pageid_offset(id)
+        to_page, to_offset = pageid_offset(packed_endid)
 
         packed_id = s.reverse[from_page][from_offset]
         s.packed[packed_id] = packed_endid
@@ -220,7 +229,7 @@ Base.:(<)(a::Indices, b::Indices) = ( a<=b ) && !isequal(a, b)
 Base.:(<=)(a::Indices, b::Indices) = issubset(a, b)
 
 function findfirst_packed_id(i, s::Indices)
-    pageid, offset = pageid_offset(s, i)
+    pageid, offset = pageid_offset(i)
     if pageid > length(s.counters) || s.counters[pageid] == 0
         return 0
     end
@@ -234,7 +243,7 @@ function Base.permute!(s::Indices, p)
     permute!(s.packed)
     @inbounds for (i, eid) in s.packed
         p[i] == i && continue #nothing was changed
-        pageid, offset = pageid_offset(s, eid)
+        pageid, offset = pageid_offset(eid)
         s.reverse[page][offset] = i
     end
 end
@@ -251,7 +260,7 @@ Base.IteratorSize(::IndicesIterator) = Base.SizeUnknown()
 @inline function Base.iterate(it::IndicesIterator, state=1)
     it_length = length(it.shortest)
     for i=state:it_length
-        id = indices(it.shortest).packed[i]
+        @inbounds id = indices(it.shortest).packed[i]
         if it.test(id)
             return id, i+1
         end
@@ -284,7 +293,7 @@ macro indices_in(indices_expr)
 end
 
 function expand_indices_bool(expr)
-    if expr isa Symbol || expr.head == :ref || (expr.head == :call && expr.args[1] != :!)
+    if expr isa Symbol || expr.head == :ref || expr.head == :curly || (expr.head == :call && expr.args[1] != :!)
         return Expr(:call, :in, :x, expr), [expr], Symbol[]
     end
     # if !in(expr.head, (:||, :&&)) && !(expr.head == :call && expr.args[1] in == :!)
@@ -333,8 +342,8 @@ Base.@propagate_inbounds function swap_order!(ids::Indices, from_page::Page, to_
 end
 
 Base.@propagate_inbounds function swap_order!(ids::Indices, reverse_id1::Int, reverse_id2::Int)
-    from_page = pageid_offset(ids, reverse_id1)
-    to_page = pageid_offset(ids, reverse_id2)
+    from_page = pageid_offset(reverse_id1)
+    to_page = pageid_offset(reverse_id2)
     packed_id1 = ids[from_page]
     packed_id2 = ids[to_page]
     swap_order!(ids, from_page, to_page, packed_id1, packed_id2)

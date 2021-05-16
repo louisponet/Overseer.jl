@@ -25,7 +25,7 @@ vector at that index, i.e. generally not the storage linked to the `Entity` with
 """
 struct Component{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
-    data::Vector{T}
+    data   ::Vector{T}
 end
 
 Component{T}() where {T} = Component(Indices(), T[])
@@ -37,8 +37,8 @@ data for different entities. This should be used for very large `ComponentData`.
 """
 struct SharedComponent{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
-    data::Vector{Int} # saves the indices into the shared for each of the entities
-    shared::Vector{T}
+    data   ::Vector{Int} # saves the indices into the shared for each of the entities
+    shared ::Vector{T}
 end
 
 SharedComponent{T}() where {T <: ComponentData} = SharedComponent{T}(Indices(), Int[], T[])
@@ -66,12 +66,12 @@ function Base.permute!(c::AbstractComponent, permvec)
     permute!(c.indices, permvec)
 end
 
-Base.@propagate_inbounds @inline Base.getindex(c::Component, e::Entity) = c.data[c.indices[e.id]]
-Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, e::Entity) = c.shared[c.data[c.indices[e.id]]]
-Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
+Base.@propagate_inbounds @inline Base.getindex(c::Component,       e::AbstractEntity)  = c.data[c.indices[e.id]]
+Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, e::AbstractEntity)  = c.shared[c.data[c.indices[e.id]]]
+Base.@propagate_inbounds @inline Base.getindex(c::Component,       i::Integer) = c.data[i]
 Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) = c.shared[c.data[i]]
 
-@inline function Base.setindex!(c::Component{T}, v::T, e::Entity) where {T}
+@inline function Base.setindex!(c::Component{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
     @boundscheck if !in(e, c)
         push!(c.indices, eid)
@@ -81,7 +81,7 @@ Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) =
     @inbounds c.data[c.indices[eid]] = v
     return v
 end
-@inline function Base.setindex!(c::SharedComponent{T}, v::T, e::Entity) where {T}
+@inline function Base.setindex!(c::SharedComponent{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
     t_shared_id = findfirst(x->x == v, c.shared)
     shared_id = t_shared_id === nothing ? (push!(c.shared, v); length(c.shared)) : t_shared_id
@@ -93,6 +93,36 @@ end
     @inbounds c.data[c.indices[eid]] = shared_id
     return v
 end
+
+#TODO This is necessary  to support || in @entities_in, do we need that?
+# See below for the code without
+@inline function Base.pointer(c::Component{T}, e::AbstractEntity) where {T}
+    if e.id in c.indices
+        if T.mutable
+            unsafe_load(reinterpret(Ptr{Ptr{T}}, pointer(c.data, @inbounds c.indices[e.id])))
+        else
+            return pointer(c.data, @inbounds c.indices[e.id])
+        end
+    else
+        return Ptr{T}()
+    end
+end
+        
+@inline function Base.pointer(c::SharedComponent{T}, e::AbstractEntity) where {T}
+    if e.id in c.indices
+        if T.mutable
+            unsafe_load(reinterpret(Ptr{Ptr{T}}, pointer(c.shared, @inbounds c.data[c.indices[e.id]])))
+        else
+            return pointer(c.shared, @inbounds c.data[c.indices[e.id]])
+        end
+    else
+        return Ptr{T}()
+    end
+end
+# @inline Base.pointer(c::Component{T}, e::Entity) where {T}=
+#     pointer(c.data, @inbounds c.indices[e.id])
+# @inline Base.pointer(c::SharedComponent{T}, e::Entity) where {T} =
+#     pointer(c.shared, @inbounds c.data[c.indices[e.id]])
 
 function Base.empty!(c::Component)
     empty!(c.indices)
@@ -106,7 +136,7 @@ function Base.empty!(c::SharedComponent)
     return c
 end
 
-function swap_order!(c::AbstractComponent, e1::Entity, e2::Entity)
+function swap_order!(c::AbstractComponent, e1::AbstractEntity, e2::AbstractEntity)
     @boundscheck if !in(e1, c)
         throw(BoundsError(c, e1))
     elseif !in(e2, c)
@@ -118,7 +148,7 @@ function swap_order!(c::AbstractComponent, e1::Entity, e2::Entity)
     end
 end
 
-function pop_indices_data!(c::AbstractComponent, e::Entity)
+function pop_indices_data!(c::AbstractComponent, e::AbstractEntity)
     @boundscheck if !in(e, c)
         throw(BoundsError(c, e))
     end
@@ -133,9 +163,9 @@ function pop_indices_data!(c::AbstractComponent, e::Entity)
     end
 end
 
-Base.pop!(c::Component, e::Entity) = pop_indices_data!(c, e)
+Base.pop!(c::Component, e::AbstractEntity) = pop_indices_data!(c, e)
 
-function Base.pop!(c::SharedComponent, e::Entity)
+function Base.pop!(c::SharedComponent, e::AbstractEntity)
     i = pop_indices_data!(c, e)
     idvec = c.data
     val = c.shared[i]
@@ -184,29 +214,133 @@ Base.sortperm(c::SharedComponent) = sortperm(c.data)
     end
     return h
 end
+
 ########################################
 #                                      #
 #            Iteration                 #
 #                                      #
 ########################################
-struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}}
+struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}, TT <: Tuple}
     it::T
+    components::TT
 end
 
-Base.eltype(::EntityIterator) = Entity
+Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{TT}
+    
 Base.IteratorSize(i::EntityIterator) = Base.IteratorSize(i.it)
 Base.length(i::EntityIterator) = length(i.it)
 
-function Base.iterate(i::EntityIterator, state = 1)
-    n = iterate(i.it, state)
-    n === nothing && return n
-    return Entity(n[1]), n[2]
+struct EntityState{TT<:Tuple} <: AbstractEntity
+    e::Entity
+    components::TT
 end
 
+# TODO: Cleanup, can these two be merged?
+@generated function Base.getproperty(e::EntityState{TT}, f::Symbol) where {TT}
+    fn_to_DT = Dict{Symbol, DataType}()
+    ex = :(getfield(e, f))
+    ex = Expr(:elseif, :(f === :id), :(return getfield(getfield(e, :e), :id)::Int), ex)
+    for PDT in TT.parameters
+        DT = eltype(PDT)
+        for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
+            if haskey(fn_to_DT, fn)
+                fnq = QuoteNode(fn)
+                DT_ = fn_to_DT[fn]
+                ft_ = fieldtype(DT_, fn)
+                ex = MacroTools.postwalk(ex) do x
+                    if @capture(x, return getfield(e[$DT_], $fnq)::$ft_)
+                        return quote
+                            throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
+                        end
+                    else
+                        return x
+                    end
+                end
+            else
+                fn_to_DT[fn] = DT
+                fnq = QuoteNode(fn)
+                ex = Expr(:elseif, :(f === $fnq), :(return getfield(e[$DT], $fnq)::$ft), ex)
+            end
+        end
+    end
+    ex.head = :if
+    return quote
+        $(Expr(:meta, :inline))
+        $(Expr(:meta, :propagate_inbounds))
+        $ex
+    end
+end
+
+@generated function Base.setproperty!(e::EntityState{TT}, f::Symbol, val) where {TT}
+    fn_to_DT = Dict{Symbol, DataType}()
+    ex = :(setfield!(e, f))
+    ex = Expr(:elseif, :(f === :id), :(return setfield!(getfield(e, :e), :id)::Int, val), ex)
+    for PDT in TT.parameters
+        DT = eltype(PDT)
+        for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
+            if haskey(fn_to_DT, fn)
+                fnq = QuoteNode(fn)
+                DT_ = fn_to_DT[fn]
+                ft_ = fieldtype(DT_, fn)
+                ex = MacroTools.postwalk(ex) do x
+                    if @capture(x, setfield!(e[$DT_], $fnq, val))
+                        return quote
+                            throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
+                        end
+                    else
+                        return x
+                    end
+                end
+            else
+                fn_to_DT[fn] = DT
+                fnq = QuoteNode(fn)
+                ex = Expr(:elseif, :(f === $fnq), :(return setfield!(e[$DT], $fnq, val)), ex)
+            end
+        end
+    end
+    ex.head = :if
+    return quote
+        $(Expr(:meta, :inline))
+        $(Expr(:meta, :propagate_inbounds))
+        $ex
+    end
+end
+
+@generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
+    id = findfirst(x -> eltype(x) == T, TT.parameters)
+    return quote
+        $(Expr(:meta, :inline))
+        getfield(e,:components)[$id]
+    end
+end
+
+@inline Base.@propagate_inbounds Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData} = component(e, T)[e.e]
+    
+@inline Base.@propagate_inbounds Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData} =
+    component(e, T)[e] = x
+
+@generated function Base.in(e::EntityState{TT}, ::AbstractComponent{T}) where {T,TT}
+    id = findfirst(x -> eltype(x) == T, TT.parameters)
+    if id === nothing
+        return :(false)
+    else
+        return :(in(e.e, getfield(e, :components)[$id]))
+    end
+end
+   
+@inline function Base.iterate(i::EntityIterator, state = 1)
+    n = iterate(i.it, state)
+    n === nothing && return n
+    e = Entity(n[1])
+    return EntityState(e, i.components), n[2]
+end
+
+Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
+    
 macro entities_in(indices_expr)
     expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
     if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-        return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])))))
+        return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])), ($(t_sets[1]),))))
     else
         return esc(quote
             t_comps = $(Expr(:tuple, t_sets...))
@@ -228,12 +362,69 @@ macro entities_in(indices_expr)
             else
                 shortest = t_shortest
             end
-            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr))
+            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr), (t_comps..., t_or_comps...,))
         end)
     end
 end
 
-Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
+macro entities_in(ledger, indices_expr)
+    expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
+    t_comp_defs = quote
+    end
+    comp_sym_map = Dict()
+    for s in [t_sets; t_orsets]
+        sym = gensym()
+        t_comp_defs = quote
+            $t_comp_defs
+            $sym = $ledger[$s]
+        end
+        comp_sym_map[s] = sym
+    end
+    t_comp_defs = MacroTools.rmlines(MacroTools.flatten(t_comp_defs))
+    
+    expr = MacroTools.postwalk(expr) do x
+        if x in keys(comp_sym_map)
+            return comp_sym_map[x]
+        else
+            return x
+        end
+    end
+    t_sets = map(x -> comp_sym_map[x], t_sets)
+    t_orsets = map(x -> comp_sym_map[x], t_orsets)
+    
+    if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
+        return esc(quote
+            $t_comp_defs
+            Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])), ($(t_sets[1]),))
+        end)
+    else
+        return esc(quote
+            $t_comp_defs
+            t_comps = $(Expr(:tuple, t_sets...))
+            t_or_comps = $(Expr(:tuple, t_orsets...))
+            sets = map(Overseer.indices_iterator, t_comps)
+            orsets = map(Overseer.indices_iterator, t_or_comps)
+            if isempty(sets)
+                minlen, minid = findmin(map(length, orsets))
+                t_shortest = orsets[minid]
+            else
+                minlen, minid = findmin(map(length, sets))
+                t_shortest = sets[minid]
+            end
+            if $(!isempty(t_orsets))
+                shortest = deepcopy(t_shortest)
+                for s in orsets
+                    union!(shortest, s)
+                end
+            else
+                shortest = t_shortest
+            end
+            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr), (t_comps..., t_or_comps...,))
+        end)
+    end
+end    
+    
+
 
 function Base.:(==)(c1::C1, c2::C2) where {C1 <: AbstractComponent, C2 <: AbstractComponent}
     if eltype(C1) != eltype(C2) ||length(c1) != length(c2)
@@ -301,4 +492,3 @@ function _shared_component(typedef, mod)
        	Overseer.component_type(::Type{$tn}) = Overseer.SharedComponent
     end
 end
-

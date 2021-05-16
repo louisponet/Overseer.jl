@@ -1,4 +1,4 @@
-struct Entity
+struct Entity <: AbstractEntity
     id::Int
 end
 
