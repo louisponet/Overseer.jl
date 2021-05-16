@@ -227,7 +227,7 @@ end
 
 @generated function Base.eltype(::EntityIterator{T, TT}) where {T, TT}
     t = map(x->Ptr{eltype(x)}, TT.parameters)
-    return :(EntityState{Tuple{$t...}})
+    return :(EntityState{Tuple{$(t...)}})
 end
     
 Base.IteratorSize(i::EntityIterator) = Base.IteratorSize(i.it)
@@ -508,4 +508,3 @@ function _shared_component(typedef, mod)
        	Overseer.component_type(::Type{$tn}) = Overseer.SharedComponent
     end
 end
-
