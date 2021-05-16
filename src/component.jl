@@ -49,7 +49,7 @@ Base.eltype(::Type{<:AbstractComponent{T}}) where T = T
 Base.length(c::AbstractComponent) = length(c.data)
 
 Base.in(i::Integer, c::AbstractComponent) = in(i, c.indices)
-Base.in(e::Entity, c::AbstractComponent)  = in(e.id, c)
+Base.in(e::AbstractEntity, c::AbstractComponent)  = in(e.id, c)
 
 Base.isempty(c::AbstractComponent) = isempty(c.data)
 
@@ -81,6 +81,7 @@ Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) =
     @inbounds c.data[c.indices[eid]] = v
     return v
 end
+
 @inline function Base.setindex!(c::SharedComponent{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
     t_shared_id = findfirst(x->x == v, c.shared)
@@ -318,16 +319,7 @@ end
     
 @inline Base.@propagate_inbounds Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData} =
     component(e, T)[e] = x
-
-@generated function Base.in(e::EntityState{TT}, ::AbstractComponent{T}) where {T,TT}
-    id = findfirst(x -> eltype(x) == T, TT.parameters)
-    if id === nothing
-        return :(false)
-    else
-        return :(in(e.e, getfield(e, :components)[$id]))
-    end
-end
-   
+ 
 @inline function Base.iterate(i::EntityIterator, state = 1)
     n = iterate(i.it, state)
     n === nothing && return n
