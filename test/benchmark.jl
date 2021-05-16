@@ -11,7 +11,7 @@ end
     spring_constant::Float64
 end
 
-@component struct Rotation
+@component mutable struct Rotation
 	omega::Float64
 	center::NTuple{3, Float64}
 	axis::NTuple{3, Float64}

@@ -226,5 +226,5 @@ end
     iter = @entities_in(comp1 && comp2)
     es = collect(iter)
     @test getfield.(es, :e) == [e2]
-    @test eltype(es) == Overseer.EntityState{Tuple{Ptr{Test1},Ptr{Test2}}}
+    @test eltype(es) == Overseer.EntityState{Tuple{Component{Test1},Component{Test2}}}
 end

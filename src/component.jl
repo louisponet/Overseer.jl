@@ -225,17 +225,14 @@ struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}, TT <: T
     components::TT
 end
 
-@generated function Base.eltype(::EntityIterator{T, TT}) where {T, TT}
-    t = map(x->Ptr{eltype(x)}, TT.parameters)
-    return :(EntityState{Tuple{$(t...)}})
-end
+Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{TT}
     
 Base.IteratorSize(i::EntityIterator) = Base.IteratorSize(i.it)
 Base.length(i::EntityIterator) = length(i.it)
 
 struct EntityState{TT<:Tuple} <: AbstractEntity
     e::Entity
-    pointers::TT
+    components::TT
 end
 
 # TODO: Cleanup, can these two be merged?
@@ -267,12 +264,16 @@ end
         end
     end
     ex.head = :if
-    return ex
+    return quote
+        $(Expr(:meta, :inline))
+        $(Expr(:meta, :propagate_inbounds))
+        $ex
+    end
 end
 
 @generated function Base.setproperty!(e::EntityState{TT}, f::Symbol, val) where {TT}
     fn_to_DT = Dict{Symbol, DataType}()
-    ex = :(getfield(e, f))
+    ex = :(setfield!(e, f))
     ex = Expr(:elseif, :(f === :id), :(return setfield!(getfield(e, :e), :id)::Int, val), ex)
     for PDT in TT.parameters
         DT = eltype(PDT)
@@ -282,7 +283,7 @@ end
                 DT_ = fn_to_DT[fn]
                 ft_ = fieldtype(DT_, fn)
                 ex = MacroTools.postwalk(ex) do x
-                    if @capture(x, setfield!(t, $fnq, val))
+                    if @capture(x, setfield!(e[$DT_], $fnq, val))
                         return quote
                             throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
                         end
@@ -293,54 +294,37 @@ end
             else
                 fn_to_DT[fn] = DT
                 fnq = QuoteNode(fn)
-                tex = quote
-                    ptr = valid_pointer(e, $DT)
-                    t = Base.unsafe_pointer_to_objref(ptr)
-                    setfield!(t, $fnq, val)
-                end
-                    
-                ex = Expr(:elseif, :(f === $fnq), tex, ex)
+                ex = Expr(:elseif, :(f === $fnq), :(return setfield!(e[$DT], $fnq, val)), ex)
             end
         end
     end
     ex.head = :if
-    return ex
-end
-
-@generated function Base.pointer(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
-    id = findfirst(x -> eltype(x) == T, TT.parameters)
-    return :(getfield(e, :pointers)[$id])
-end
-
-#TODO: These boundchecks etc are to ensure in the case of || in @entities_in nobody is trying to load some
-#      invalid memory. Do we really need ||?
-#      diff in benchmarks is 47.8 vs 48.2 mus
-#      Solution, have Ptr and MaybePtr so that the boundscheck can be done at compile time,
-#      or have a different iterator for || vs &&
-
-@inline function valid_pointer(e::EntityState, ::Type{T}) where {T<:ComponentData}
-    ptr = pointer(e, T)
-    if ptr === Ptr{T}()
-        throw(error("$e does not have ComponentData $T"))
+    return quote
+        $(Expr(:meta, :inline))
+        $(Expr(:meta, :propagate_inbounds))
+        $ex
     end
-    return ptr
 end
 
-Base.@propagate_inbounds @inline pointers(x::Tuple{}, e::Entity) = ()
-Base.@propagate_inbounds @inline pointers(x::Tuple, e::Entity) = (pointer(first(x), e), pointers(Base.tail(x), e)...)
+@generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
+    id = findfirst(x -> eltype(x) == T, TT.parameters)
+    return quote
+        $(Expr(:meta, :inline))
+        getfield(e,:components)[$id]
+    end
+end
 
-Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData} =
-        T.mutable ? Base.unsafe_pointer_to_objref(valid_pointer(e, T))::T : unsafe_load(valid_pointer(e, T))::T
-
-Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData} =
-    unsafe_store!(valid_pointer(e, T), x)
+@inline Base.@propagate_inbounds Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData} = component(e, T)[e.e]
+    
+@inline Base.@propagate_inbounds Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData} =
+    component(e, T)[e] = x
 
 @generated function Base.in(e::EntityState{TT}, ::AbstractComponent{T}) where {T,TT}
     id = findfirst(x -> eltype(x) == T, TT.parameters)
     if id === nothing
         return :(false)
     else
-        return :(getfield(e, :pointers)[$id] != Ptr{T}())
+        return :(in(e.e, getfield(e, :components)[$id]))
     end
 end
    
@@ -348,7 +332,7 @@ end
     n = iterate(i.it, state)
     n === nothing && return n
     e = Entity(n[1])
-    return EntityState(e, @inbounds pointers(i.components, e)), n[2]
+    return EntityState(e, i.components), n[2]
 end
 
 Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
