@@ -293,7 +293,7 @@ macro indices_in(indices_expr)
 end
 
 function expand_indices_bool(expr)
-    if expr isa Symbol || expr.head == :ref || expr.head == :curly || (expr.head == :call && expr.args[1] != :!)
+    if expr isa Symbol || expr.head in (:., :ref, :curly) || (expr.head == :call && expr.args[1] != :!)
         return Expr(:call, :in, :x, expr), [expr], Symbol[]
     end
     # if !in(expr.head, (:||, :&&)) && !(expr.head == :call && expr.args[1] in == :!)
