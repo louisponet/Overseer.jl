@@ -1,9 +1,7 @@
 name: Run benchmarks
 
 on:
-  push:
-    branches:
-      - master
+  pull_request:
 
 jobs:
   Benchmark:
