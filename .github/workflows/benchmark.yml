@@ -3,7 +3,7 @@ name: Run benchmarks
 on:
   push:
     branches:
-	  - master
+      - master
 
 jobs:
   Benchmark:
