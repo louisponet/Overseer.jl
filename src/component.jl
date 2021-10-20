@@ -521,11 +521,11 @@ end
     eid = e.id
     @inbounds if in(e, c)
         g = c.group[c.indices[eid]]
-        if c.group_size[g] == 1 #is_unique_in(c.group[c.indices[eid]], c.group)
-            # the entity already has its own group - adjust value
+        if c.group_size[g] == 1
+            # the entity already has its own (otherwise empty) group - adjust value
             c.data[g] = v
         else
-            # the entity is part of a group - create a new one
+            # the entity is part of a larger group - create a new one
             c.group_size[g] -= 1
             push!(c.data, v)
             push!(c.group_size, 1)
@@ -547,30 +547,32 @@ end
     @boundscheck if !in(p, c)
         throw(BoundsError(c, p))
     end
-    pg = c.group[c.indices[p.id]]
-    if in(e, c)
-        eg = c.group[c.indices[e.id]]
-        if c.group_size[eg] == 1 #is_unique_in(c.group[c.indices[eid]], c.group)
-            # if this entity is the only one holding onto a value, remove that 
-            # value and cleanup group indices
-            deleteat!(c.data, idx)
-            deleteat!(c.group_size, idx)
-            for i in eachindex(c.group)
-                c.group[i] = c.group[i] - (c.group[i] > eg)
+    @inbounds begin
+        pg = c.group[c.indices[p.id]]
+        if in(e, c)
+            eg = c.group[c.indices[e.id]]
+            if c.group_size[eg] == 1
+                # if this entity is the only one holding onto a value, remove 
+                # that value and cleanup group indices
+                deleteat!(c.data, idx)
+                deleteat!(c.group_size, idx)
+                for i in eachindex(c.group)
+                    c.group[i] = c.group[i] - (c.group[i] > eg)
+                end
+            else
+                c.group_size[eg] -= 1
             end
+            # adjust group index either way
+            c.group[c.indices[e.id]] = pg
         else
-            c.group_size[eg] -= 1
+            # if the entity is not in there we have to add it
+            push!(c.indices, e.id)
+            push!(c.group, c.group[c.indices[p.id]])
         end
-        # adjust group index either way
-        c.group[c.indices[e.id]] = pg
-    else
-        # if the entity is not in there we have to add it
-        push!(c.indices, e.id)
-        push!(c.group, c.group[c.indices[p.id]])
-    end
-    c.group_size[pg] += 1
+        c.group_size[pg] += 1
 
-    return c[p]
+        return c[p]
+    end
 end
 
 # c[ParentGroup(entity)] = value
@@ -644,40 +646,45 @@ function _grouped_component(typedef, mod)
 end
 
 function make_unique!(c::GroupedComponent)
-    # Find all duplicates
-    for i in eachindex(c.group)
-        g0 = c.group[i]
-        if c.group_size[g0] > 0
-            v0 = c.data[g0]
-            for j in i+1:length(c.group)
-                g = c.group[j]
-                if c.group_size[g] > 0 && c.data[g] == v0
-                    c.group_size[g] -= 1
-                    c.group_size[g0] += 1
-                    c.group[j] = g0
+    @inbounds begin
+        # Go through all groups and check if a later group has the same value.
+        # If it does mark the later group empty.
+        for i in eachindex(c.group)
+            g0 = c.group[i]
+            if c.group_size[g0] > 0
+                v0 = c.data[g0]
+                for j in i+1:length(c.group)
+                    g = c.group[j]
+                    if c.group_size[g] > 0 && c.data[g] == v0
+                        c.group_size[g0] += c.group_size[g]
+                        c.group_size[g] = 0
+                        c.group[j] = g0
+                    end
                 end
             end
         end
-    end
 
-    # remove duplicates
-    i = 1
-    while i <= length(c.group_size)
-        if c.group_size[i] == 0
-            if i == length(c.group_size)
-                pop!(c.group_size)
-                pop!(c.data)
-                break
-            else
-                N = length(c.group_size)
-                c.group_size[i] = pop!(c.group_size)
-                c.data[i] = pop!(c.data)
-                for j in eachindex(c.group)
-                    c.group[j] = c.group[j] == N ? i : c.group[j]
+        # Go through all groups again and replace empty groups (i.e. its data 
+        # and group_size) by the current last group. Adjust group indices 
+        # accordingly.
+        i = 1
+        while i <= length(c.group_size)
+            if c.group_size[i] == 0
+                if i == length(c.group_size)
+                    pop!(c.group_size)
+                    pop!(c.data)
+                    break
+                else
+                    N = length(c.group_size)
+                    c.group_size[i] = pop!(c.group_size)
+                    c.data[i] = pop!(c.data)
+                    for j in eachindex(c.group)
+                        c.group[j] = c.group[j] == N ? i : c.group[j]
+                    end
                 end
+            else
+                i += 1
             end
-        else
-            i += 1
         end
     end
 
