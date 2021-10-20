@@ -88,7 +88,7 @@ Base.copy(m::AbstractLedger) = Ledger(copy(entities(m)),
                                       deepcopy(groups(m)), 
                                       deepcopy(stages(m)))
 
-function Base.getindex(m::AbstractLedger, e::Entity)
+function Base.getindex(m::AbstractLedger, e::AbstractEntity)
 	entity_assert(m, e)		
 	data = ComponentData[]
 	for c in values(components(m))
@@ -107,7 +107,7 @@ function Base.getindex(v::Vector{Stage}, s::Symbol)
     return v[id]
 end
 
-function Base.setindex!(m::AbstractLedger, v::T, e::Entity) where {T<:ComponentData}
+function Base.setindex!(m::AbstractLedger, v::T, e::AbstractEntity) where {T<:ComponentData}
 	entity_assert(m, e)
 	ensure_component!(m, T)
 	if !in(e, m[T])
@@ -123,7 +123,7 @@ function Base.setindex!(m::AbstractLedger, v::C, ::Type{T}) where {T <: Componen
 end
 
 
-function register_new!(m::AbstractLedger, ::Type{T}, e::Entity) where {T<:ComponentData}
+function register_new!(m::AbstractLedger, ::Type{T}, e::AbstractEntity) where {T<:ComponentData}
     for g in groups(m)
         if !(g isa OrderedGroup)
             continue
@@ -179,7 +179,7 @@ function Base.insert!(m::AbstractLedger, s::Symbol, i::Int, sys::System)
     prepare(sys, m)
 end
 
-function Base.delete!(m::AbstractLedger, e::Entity)
+function Base.delete!(m::AbstractLedger, e::AbstractEntity)
 	entity_assert(m, e)
 	push!(free_entities(m), e)
 	entities(m)[e.id] = EMPTY_ENTITY
@@ -221,7 +221,7 @@ function components(ledger::AbstractLedger, ::Type{T}) where {T<:ComponentData}
 	return comps
 end
 
-function entity_assert(m::AbstractLedger, e::Entity)
+function entity_assert(m::AbstractLedger, e::AbstractEntity)
 	es = entities(m)
 	@assert length(es) >= e.id "$e was never initiated."
 	@assert es[e.id] != EMPTY_ENTITY "$e was removed previously."
@@ -230,6 +230,11 @@ end
 function schedule_delete!(m::AbstractLedger, e::Entity)
 	entity_assert(m, e)
 	push!(to_delete(m), e)
+end
+
+function schedule_delete!(m::AbstractLedger, e::EntityState)
+	entity_assert(m, e)
+	push!(to_delete(m), e.e)
 end
 
 function delete_scheduled!(m::AbstractLedger)

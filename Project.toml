@@ -7,11 +7,12 @@ version = "0.1.1"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 
 [compat]
-julia = "^1"
+julia = "^1.1"
 
 [extras]
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 
 [targets]
-test = ["Test", "Parameters"]
+test = ["Test", "Parameters", "BenchmarkTools"]

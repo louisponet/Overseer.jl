@@ -121,6 +121,35 @@ empty_entities!(m2)
 @test length(components(m2, TComp)) == 2
 
 empty!(m)
+@test isempty(m.entities)
+@test isempty(m.to_delete)
+
+struct TSys3 <: System end
+
+Overseer.requested_components(::TSys3) = (T1, T2, T3, T4)
+
+function Overseer.update(::TSys3, m::AbstractLedger)
+    t1 = m[T1]
+    t2 = m[T2]
+    t3 = m[T3]
+    for e in @entities_in(t1 || t2 || t3 )
+        schedule_delete!(m, e)
+    end
+end
+for i = 1:10
+    Entity(m, T1())
+    Entity(m, T2())
+    Entity(m, T3())
+end
+@test length(m.entities) == 30
+update(TSys3(), m)
+delete_scheduled!(m)
+
+@test length(valid_entities(m)) == 0
+@test isempty(m.to_delete)
+
+empty!(m)
+
 for i=1:10
     e1 = Entity(m, 
                 Test1(length(entities(m))),
@@ -159,11 +188,11 @@ t1[test_entity] = Test3()
 
 @test t1[test_entity] == (m[Test1][test_entity], m[Test2][test_entity], m[Test3][test_entity])
 
-tot = 0
-for e in @entities_in(group(m, Test1, Test2))
-    global tot += 1
-end
-@test tot == length(group(m, Test1, Test2))
+# tot = 0
+# for e in @entities_in(group(m, Test1, Test2))
+#     global tot += 1
+# end
+# @test tot == length(group(m, Test1, Test2))
 
 test_entity = entities(m)[end-1]
 m[test_entity] = Test3(test_entity.id)

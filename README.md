@@ -1,6 +1,6 @@
 # Overseer (Entity Component System)
-[![Build Status](https://travis-ci.org/louisponet/Overseer.jl.svg?branch=master)](https://travis-ci.org/louisponet/Overseer.jl)
-[![Coverage Status](https://coveralls.io/repos/github/louisponet/Overseer.jl/badge.svg?branch=master)](https://coveralls.io/github/louisponet/Overseer.jl?branch=master)
+[![Build Status](https://github.com/louisponet/Overseer.jl/workflows/CI/badge.svg)](https://github.com/louisponet/Overseer.jl/actions?query=workflow%3ACI)
+[![codecov](https://codecov.io/gh/louisponet/Overseer.jl/branch/master/graph/badge.svg?token=mVK0aEQGuu)](https://codecov.io/gh/louisponet/Overseer.jl)
 
 This package supplies a lightweight, performant and friction-free implementation of the [Entity component system](https://en.wikipedia.org/wiki/Entity_component_system)(ECS) paradigm. It has been used mostly in game development, however I think that it's concept, way of programming and thinking can be applied and used in more broad applications. It offers a very clean and flexible way to gradually build up an application in well separated blocks, while remaining very performant due to the way data is generally structured and used.
 
@@ -55,7 +55,6 @@ end
 	axis::Vec3{Float64}
 end
 ```
-One thing to remember is that for now components can not have type parameters. 
 Next we define our systems.
 
 ```julia
@@ -64,32 +63,23 @@ struct Oscillator <: System end
 Overseer.requested_components(::Oscillator) = (Spatial, Spring)
 
 function Overseer.update(::Oscillator, m::AbstractLedger)
-	spatial = m[Spatial]
-	spring = m[Spring]
-	for e in @entities_in(spatial && spring)
-		e_spat  = spatial[e]
-		spr     = spring[e]
-		v_prev  = e_spat.velocity 
-		new_v   = v_prev - (e_spat.position - spr.center) * spr.spring_constant
-		spatial[e] = Spatial(e_spat.position, new_v)
+	for e in @entities_in(m, Spatial && Spring)
+		new_v   = e.velocity - (e.position - e.center) * e.spring_constant
+		e[Spatial] = Spatial(e.position, new_v)
 	end
 end
 
 struct Rotator <: System  end
 Overseer.requested_components(::Rotator) = (Spatial, Rotation)
 
-function Overseer.update(::Rotator, dio::AbstractLedger)
-	rotation  = dio[Rotation]
-	spatial   = dio[Spatial]
+function Overseer.update(::Rotator, m::AbstractLedger)
 	dt = 0.01
-	for e in @entities_in(rotation && spatial) 
-    	e_rotation = rotation[e]
-    	e_spatial  = spatial[e]
-		n          = e_rotation.axis
-		r          = - e_rotation.center + e_spatial.position
-		theta      = e_rotation.omega * dt
+	for e in @entities_in(m, Rotation && Spatial) 
+		n          = e.axis
+		r          = - e.center + e.position
+		theta      = e.omega * dt
 		nnd        = n * dot(n, r)
-		spatial[e] = Spatial(Point3f0(e_rotation.center + nnd + (r - nnd) * cos(theta) + cross(r, n) * sin(theta)), e_spatial.velocity)
+		e[Spatial] = Spatial(Point3f0(e.center + nnd + (r - nnd) * cos(theta) + cross(r, n) * sin(theta)), e.velocity)
 	end
 end
 
@@ -110,8 +100,11 @@ As we can see the oscillator will cause the velocity to be inwards towards the c
 the rotator causes just a rotation around an axis with a given rotational velocity, and the mover updates the positions 
 given the velocity.
 
-Each system iterates over the entities that have the components like given to the rules for `@entities_in`. For example 
-`@entities_in(a && b || c && !d)` will iterate through all the entities that are in component `a` and `b` or `c` but not in `d`. 
+Each system iterates over the entities that have the components like given to the rules for `@entities_in`. 
+There are two ways of using this, either in the form `@entities_in(ledger, ComponentData1 && Componentdata2)` or 
+`@entities_in(comp1 && comp2)` where `comp1 = m[ComponentData1]`,`comp2 = m[ComponentData2]`. 
+Rules can be given in the form of `@entities_in(a && (b || c) && !d)`, which will iterate through 
+all the entities that are in component `a` and `b` or `c` but not in `d`. 
 
 Now we group these systems in a `:simulation` stage, construct a `Ledger` which is a basic `AbstractLedger` and generate some entities. 
 ```julia
