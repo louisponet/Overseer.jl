@@ -656,8 +656,8 @@ function make_unique!(c::GroupedComponent)
                 for j in i+1:length(c.group)
                     g = c.group[j]
                     if c.group_size[g] > 0 && c.data[g] == v0
-                        c.group_size[g0] += c.group_size[g]
-                        c.group_size[g] = 0
+                        c.group_size[g] -= 1
+                        c.group_size[g0] += 1
                         c.group[j] = g0
                     end
                 end
