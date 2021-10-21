@@ -503,7 +503,7 @@ end
 
 GroupedComponent{T}() where {T <: ComponentData} = GroupedComponent{T}(Indices(), Int[], Int[], T[])
 
-Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, e::Entity) = c.data[c.group[c.indices[e.id]]]
+Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, e::AbstractEntity) = c.data[c.group[c.indices[e.id]]]
 Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, i::Integer) = c.data[c.group[i]]
 
 function is_unique_in(value, collection)
@@ -514,10 +514,9 @@ function is_unique_in(value, collection)
     return count == 1
 end
 
-
 # c[entity] = value
 # set value of <only> this entity
-@inline function Base.setindex!(c::GroupedComponent{T}, v::T, e::Entity) where {T}
+@inline function Base.setindex!(c::GroupedComponent{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
     @inbounds if in(e, c)
         g = c.group[c.indices[eid]]
@@ -543,7 +542,7 @@ end
 
 # c[entity] = parent
 # set the value of this entity to that of parent
-@inline function Base.setindex!(c::GroupedComponent, p::Entity, e::Entity)
+@inline function Base.setindex!(c::GroupedComponent, p::AbstractEntity, e::AbstractEntity)
     @boundscheck if !in(p, c)
         throw(BoundsError(c, p))
     end
@@ -598,7 +597,7 @@ function Base.empty!(c::GroupedComponent)
 end
 
 
-function Base.pop!(c::GroupedComponent, e::Entity)
+function Base.pop!(c::GroupedComponent, e::AbstractEntity)
     @boundscheck if !in(e, c)
         throw(BoundsError(c, e))
     end
