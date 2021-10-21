@@ -228,3 +228,97 @@ end
     @test getfield.(es, :e) == [e2]
     @test eltype(es) == Overseer.EntityState{Tuple{Component{Test1},Component{Test2}}}
 end
+
+
+@testset "GroupedComponent" begin
+    @grouped_component struct Test5
+        x::Int
+    end
+
+    @test Overseer.component_type(Test5) == Overseer.GroupedComponent
+    c5 = Overseer.component_type(Test5){Test5}()
+
+    p1 = Entity(1)
+    p2 = Entity(2)
+    c5[p1] = Test5(1)
+    c5[p2] = Test5(2)
+
+    entities = [Entity(i) for i in 3:10]
+    for (i, e) in enumerate(entities)
+        c5[e] = (p1, p2)[mod1(i, 2)]
+    end
+
+    # check created values
+    count = 0
+    _sum = 0
+    for e in @entities_in(c5)
+        count += 1
+        _sum += c5[e].x
+    end
+    @test count == 10
+    @test _sum == 15
+    @test c5.group_size == [5, 5]
+
+    # check for no duplication
+    @test length(c5.data) == 2
+
+    # Check some basics
+    @test p1 in c5
+    @test pop!(c5, p1) == Test5(1)
+    @test !(p1 in c5)
+    @test length(c5) == 9
+    @test c5[p2] == Test5(2)
+    @test !isempty(c5)
+    @test c5.group_size == [4, 5]
+
+    count = 0
+    _sum = 0
+    for e in @entities_in(c5)
+        count += 1
+        _sum += c5[e].x
+    end
+    @test count == 9
+    @test _sum == 14
+
+    # adjust parent value of group
+    c5[parent(p2)] = Test5(1)
+    count = 0
+    _sum = 0
+    for e in @entities_in(c5)
+        count += 1
+        _sum += c5[e].x
+    end
+    @test count == 9
+    @test _sum == 9
+    @test c5.group_size == [4, 5]
+
+    # adjust single value
+    c5[p2] = Test5(2)
+    count = 0
+    _sum = 0
+    for e in @entities_in(c5)
+        count += 1
+        _sum += c5[e].x
+    end
+    @test count == 9
+    @test _sum == 10
+    @test length(c5.data) == 3
+    @test c5.group_size == [4, 4, 1]
+
+    Overseer.make_unique!(c5)
+    @test length(c5.data) == 2
+    @test c5.group_size == [1, 8]
+    @test c5.data == [Test5(2), Test5(1)]
+
+    # remove all entites of a group
+    for i in 3:10
+        pop!(c5, Entity(i))
+    end
+    @test length(c5.data) == 1
+    @test length(c5) == 1
+    @test c5.group_size == [1]
+
+    empty!(c5)
+    @test isempty(c5)
+    @test c5.group_size == Int[]
+end

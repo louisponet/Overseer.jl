@@ -26,7 +26,7 @@ module Overseer
     include("ledger.jl")
 
     export AbstractLedger, Ledger, System, Stage, Component, SharedComponent, ComponentData, Entity
-    export @component, @shared_component
+    export @component, @shared_component, @grouped_component
     export @entities_in
 
     export update, schedule_delete!, delete_scheduled!, empty_entities!, stage, components, entities, stages

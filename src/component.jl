@@ -484,3 +484,208 @@ function _shared_component(typedef, mod)
        	Overseer.component_type(::Type{$tn}) = Overseer.SharedComponent
     end
 end
+
+
+################################################################################
+
+struct ApplyToGroup
+    e::Entity
+end
+
+Base.parent(e::Entity) = ApplyToGroup(e)
+
+struct GroupedComponent{T <: ComponentData} <: AbstractComponent{T}
+    indices::Indices
+    group::Vector{Int}
+    group_size::Vector{Int}
+    data::Vector{T}
+end
+
+GroupedComponent{T}() where {T <: ComponentData} = GroupedComponent{T}(Indices(), Int[], Int[], T[])
+
+Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, e::AbstractEntity) = c.data[c.group[c.indices[e.id]]]
+Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, i::Integer) = c.data[c.group[i]]
+
+function is_unique_in(value, collection)
+    count = 0
+    for element in collection
+        count += element == value
+    end
+    return count == 1
+end
+
+# c[entity] = value
+# set value of <only> this entity
+@inline function Base.setindex!(c::GroupedComponent{T}, v::T, e::AbstractEntity) where {T}
+    eid = e.id
+    @inbounds if in(e, c)
+        g = c.group[c.indices[eid]]
+        if c.group_size[g] == 1
+            # the entity already has its own (otherwise empty) group - adjust value
+            c.data[g] = v
+        else
+            # the entity is part of a larger group - create a new one
+            c.group_size[g] -= 1
+            push!(c.data, v)
+            push!(c.group_size, 1)
+            c.group[c.indices[eid]] = length(c.data)
+        end
+    else
+        # the entity is not in the component - add it
+        push!(c.indices, eid)
+        push!(c.group, length(c.group)+1)
+        push!(c.group_size, 1)
+        push!(c.data, v)
+    end
+    return v
+end
+
+# c[entity] = parent
+# set the value of this entity to that of parent
+@inline function Base.setindex!(c::GroupedComponent, p::AbstractEntity, e::AbstractEntity)
+    @boundscheck if !in(p, c)
+        throw(BoundsError(c, p))
+    end
+    @inbounds begin
+        pg = c.group[c.indices[p.id]]
+        if in(e, c)
+            eg = c.group[c.indices[e.id]]
+            if c.group_size[eg] == 1
+                # if this entity is the only one holding onto a value, remove 
+                # that value and cleanup group indices
+                deleteat!(c.data, idx)
+                deleteat!(c.group_size, idx)
+                for i in eachindex(c.group)
+                    c.group[i] = c.group[i] - (c.group[i] > eg)
+                end
+            else
+                c.group_size[eg] -= 1
+            end
+            # adjust group index either way
+            c.group[c.indices[e.id]] = pg
+        else
+            # if the entity is not in there we have to add it
+            push!(c.indices, e.id)
+            push!(c.group, c.group[c.indices[p.id]])
+        end
+        c.group_size[pg] += 1
+
+        return c[p]
+    end
+end
+
+# c[ParentGroup(entity)] = value
+# set the value for all entities grouped with entity
+@inline function Base.setindex!(c::GroupedComponent{T}, v::T, x::ApplyToGroup) where {T}
+    e = x.e
+    @boundscheck if !in(e, c)
+        throw(BoundsError(c, e))
+    end
+    @inbounds c.data[c.group[c.indices[e.id]]] = v
+    return v
+end
+
+
+Base.length(c::GroupedComponent) = length(c.group)
+
+function Base.empty!(c::GroupedComponent)
+    empty!(c.indices)
+    empty!(c.group)
+    empty!(c.group_size)
+    empty!(c.data)
+    return c
+end
+
+
+function Base.pop!(c::GroupedComponent, e::AbstractEntity)
+    @boundscheck if !in(e, c)
+        throw(BoundsError(c, e))
+    end
+
+    @inbounds begin
+        id = c.indices[e.id]
+        g = c.group[id]
+
+        c.group[id] = c.group[end]
+        c.group_size[g] -= 1
+        pop!(c.group)
+        pop!(c.indices, e.id)
+
+        val = c.data[g]
+
+        if c.group_size[g] == 0
+            deleteat!(c.data, g)
+            deleteat!(c.group_size, g)
+            for i in eachindex(c.group)
+                if c.group[i] > g
+                    c.group[i] -= 1
+                end
+            end
+        end
+    end
+
+    return val
+end
+
+@inline Base.iterate(c::GroupedComponent, args...) = iterate(c.data, args...)
+Base.sortperm(c::GroupedComponent) = sortperm(c.group)
+
+
+macro grouped_component(typedef)
+    return esc(Overseer._grouped_component(typedef, __module__))
+end
+
+function _grouped_component(typedef, mod)
+    t = process_typedef(typedef, mod)
+    t1, tn = t 
+    return quote
+        $t1
+       	Overseer.component_type(::Type{$tn}) = Overseer.GroupedComponent
+    end
+end
+
+function make_unique!(c::GroupedComponent)
+    @inbounds begin
+        # Go through all groups and check if a later group has the same value.
+        # If it does mark the later group empty.
+        for i in eachindex(c.group)
+            g0 = c.group[i]
+            if c.group_size[g0] > 0
+                v0 = c.data[g0]
+                for j in i+1:length(c.group)
+                    g = c.group[j]
+                    if c.group_size[g] > 0 && c.data[g] == v0
+                        c.group_size[g] -= 1
+                        c.group_size[g0] += 1
+                        c.group[j] = g0
+                    end
+                end
+            end
+        end
+
+        # Go through all groups again and replace empty groups (i.e. its data 
+        # and group_size) by the current last group. Adjust group indices 
+        # accordingly.
+        i = 1
+        while i <= length(c.group_size)
+            if c.group_size[i] == 0
+                if i == length(c.group_size)
+                    pop!(c.group_size)
+                    pop!(c.data)
+                    break
+                else
+                    N = length(c.group_size)
+                    c.group_size[i] = pop!(c.group_size)
+                    c.data[i] = pop!(c.data)
+                    for j in eachindex(c.group)
+                        c.group[j] = c.group[j] == N ? i : c.group[j]
+                    end
+                end
+            else
+                i += 1
+            end
+        end
+    end
+
+    return
+end
