@@ -321,4 +321,15 @@ end
     empty!(c5)
     @test isempty(c5)
     @test c5.group_size == Int[]
+
+    e1 = Entity(1)
+    e2 = Entity(2)
+    e3 = Entity(3)
+    c5[e1] = Test5(1)
+    c5[e3] = Test5(1)
+    c5[e2] = e1
+
+    @test length(collect(grouped_entities(c5, 1))) == c5.group_size[1]
+    @test collect(grouped_entities(c5, 1)) == [Entity(1), Entity(2)]
+       
 end

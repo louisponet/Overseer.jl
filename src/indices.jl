@@ -254,6 +254,7 @@ struct IndicesIterator{I, T<:Function}
 end
 
 Base.IteratorSize(::IndicesIterator) = Base.SizeUnknown()
+Base.IteratorEltype(::IndicesIterator) = Base.HasEltype()
 
 @inline indices(i::Indices) = i
 

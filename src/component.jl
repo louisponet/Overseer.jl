@@ -226,10 +226,10 @@ struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}, TT <: T
     components::TT
 end
 
-Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{TT}
     
-Base.IteratorSize(i::EntityIterator) = Base.IteratorSize(i.it)
-Base.length(i::EntityIterator) = length(i.it)
+Base.IteratorSize(::EntityIterator) = Base.SizeUnknown()
+Base.IteratorEltype(::EntityIterator) = Base.HasEltype()
+Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{TT}
 
 struct EntityState{TT<:Tuple} <: AbstractEntity
     e::Entity
@@ -416,8 +416,6 @@ macro entities_in(ledger, indices_expr)
     end
 end    
     
-
-
 function Base.:(==)(c1::C1, c2::C2) where {C1 <: AbstractComponent, C2 <: AbstractComponent}
     if eltype(C1) != eltype(C2) ||length(c1) != length(c2)
         return false
@@ -506,6 +504,7 @@ GroupedComponent{T}() where {T <: ComponentData} = GroupedComponent{T}(Indices()
 Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, e::AbstractEntity) = c.data[c.group[c.indices[e.id]]]
 Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, i::Integer) = c.data[c.group[i]]
 
+    
 function is_unique_in(value, collection)
     count = 0
     for element in collection
@@ -689,3 +688,32 @@ function make_unique!(c::GroupedComponent)
 
     return
 end
+
+struct GroupedEntityIterator{T}
+    c::GroupedComponent{T}
+    id::Int
+end
+    
+function grouped_entities(c::GroupedComponent, data_id::Int)
+    @boundscheck if length(c.data) < data_id
+        throw(BoundsError(c, data_id))
+    end
+    return GroupedEntityIterator(c, data_id)
+end
+
+@inline function Base.iterate(i::GroupedEntityIterator, state = 1)
+    state > i.c.group_size[i.id] && return nothing
+    n = findnext(isequal(i.id), i.c.group, state)
+    n === nothing && return n
+    e = Entity(i.c.indices[n])
+    return e, n + 1
+end
+
+Base.getindex(iterator::GroupedEntityIterator, i) = iterate(iterator, i)[1]
+    
+Base.IteratorSize(::Type{GroupedEntityIterator}) = Base.HasLength()
+Base.IteratorEltype(::Type{GroupedEntityIterator}) = Base.HasEltype()
+Base.eltype(::GroupedEntityIterator) = Entity
+Base.length(i::GroupedEntityIterator) = i.c.group_size[i.id]
+
+
