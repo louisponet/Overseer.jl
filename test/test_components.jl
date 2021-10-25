@@ -332,7 +332,6 @@ end
     @test length(collect(grouped_entities(c5, 1))) == c5.group_size[1]
     @test collect(grouped_entities(c5, 1)) == [Entity(1), Entity(3)]
 
-    println("group iteration test")
     c1 = Component{Test1}()
     c1[e1] = Test1(1)
     c1[e2] = Test1(2)
