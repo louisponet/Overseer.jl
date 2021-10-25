@@ -329,18 +329,18 @@ end
     c5[e3] = e1
     c5[e2] = Test5(1)
 
-    @test length(collect(grouped_entities(c5, 1))) == c5.group_size[1]
-    @test collect(grouped_entities(c5, 1)) == [Entity(1), Entity(3)]
+    @test length(collect(entity_group(c5, 1))) == c5.group_size[1]
+    @test collect(entity_group(c5, 1)) == [Entity(1), Entity(3)]
 
     c1 = Component{Test1}()
     c1[e1] = Test1(1)
     c1[e2] = Test1(2)
     c1[e3] = Test1(3)
     order = Entity[]
-    for e in @entities_in(grouped_entities(c5, 1) && c1)
+    for e in @entities_in(entity_group(c5, 1) && c1)
         push!(order, e.e)
     end
-    for e in @entities_in(grouped_entities(c5, 2) && c1)
+    for e in @entities_in(entity_group(c5, 2) && c1)
         push!(order, e.e)
     end
     @test order == [Entity(1), Entity(3), Entity(2)]

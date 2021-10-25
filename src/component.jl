@@ -701,7 +701,7 @@ end
 indices_iterator(g::GroupedEntityIterator) = g
 indices(g::GroupedEntityIterator) = g
 
-function grouped_entities(c::GroupedComponent, group_id::Int)
+function entity_group(c::GroupedComponent, group_id::Int)
     @boundscheck if length(c.data) < group_id
         throw(BoundsError(c, group_id))
     end
