@@ -255,13 +255,24 @@ end
 
 Base.IteratorSize(::IndicesIterator) = Base.SizeUnknown()
 Base.IteratorEltype(::IndicesIterator) = Base.HasEltype()
-
 @inline indices(i::Indices) = i
+
+@inline function Base.length(it::IndicesIterator)
+    it_length = 0
+    for i = 1:length(it.shortest)
+        @inbounds if it.test(indices(it.shortest).packed[i])
+            it_length += 1
+        end
+    end
+    return it_length
+end
+
+Base.@propagate_inbounds @inline entity_index(c::Union{<:AbstractComponent, Indices}, i::Int) = indices(c).packed[i]
 
 @inline function Base.iterate(it::IndicesIterator, state=1)
     it_length = length(it.shortest)
     for i=state:it_length
-        @inbounds id = indices(it.shortest).packed[i]
+        @inbounds id = entity_index(it.shortest, i)
         if it.test(id)
             return id, i+1
         end

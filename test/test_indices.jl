@@ -172,10 +172,12 @@ end
 
     d = Indices(1)
     t = 0
-    for e in @indices_in(((a && c[1]) || d) && !b)
+    it = @indices_in(((a && c[1]) || d) && !b)
+    for e in it 
         t+=e
     end
     @test t == 4+6+8+1
+    @test length(it) == 4
 end
 
 

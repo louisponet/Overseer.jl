@@ -230,6 +230,7 @@ end
 Base.IteratorSize(::EntityIterator) = Base.SizeUnknown()
 Base.IteratorEltype(::EntityIterator) = Base.HasEltype()
 Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{TT}
+Base.length(i::EntityIterator) = length(i.it)
 
 struct EntityState{TT<:Tuple} <: AbstractEntity
     e::Entity
@@ -501,8 +502,10 @@ end
 
 GroupedComponent{T}() where {T <: ComponentData} = GroupedComponent{T}(Indices(), Int[], Int[], T[])
 
-Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, e::AbstractEntity) = c.data[c.group[c.indices[e.id]]]
+Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, e::AbstractEntity) = c.data[group(c, e)]
 Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, i::Integer) = c.data[c.group[i]]
+Base.@propagate_inbounds @inline group(c::GroupedComponent, e::AbstractEntity) = c.group[c.indices[e.id]]
+Base.@propagate_inbounds @inline group(c::GroupedComponent, e::Int) = c.group[c.indices[e]]
 
     
 function is_unique_in(value, collection)
@@ -518,7 +521,8 @@ end
 @inline function Base.setindex!(c::GroupedComponent{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
     @inbounds if in(e, c)
-        g = c.group[c.indices[eid]]
+        pid = c.indices[eid]
+        g = c.group[pid]
         if c.group_size[g] == 1
             # the entity already has its own (otherwise empty) group - adjust value
             c.data[g] = v
@@ -527,12 +531,12 @@ end
             c.group_size[g] -= 1
             push!(c.data, v)
             push!(c.group_size, 1)
-            c.group[c.indices[eid]] = length(c.data)
+            c.group[pid] = length(c.data)
         end
     else
         # the entity is not in the component - add it
         push!(c.indices, eid)
-        push!(c.group, length(c.group)+1)
+        push!(c.group, length(c.data)+1)
         push!(c.group_size, 1)
         push!(c.data, v)
     end
@@ -546,9 +550,9 @@ end
         throw(BoundsError(c, p))
     end
     @inbounds begin
-        pg = c.group[c.indices[p.id]]
+        pg = group(c, p)
         if in(e, c)
-            eg = c.group[c.indices[e.id]]
+            eg = group(c, e)
             if c.group_size[eg] == 1
                 # if this entity is the only one holding onto a value, remove 
                 # that value and cleanup group indices
@@ -565,7 +569,7 @@ end
         else
             # if the entity is not in there we have to add it
             push!(c.indices, e.id)
-            push!(c.group, c.group[c.indices[p.id]])
+            push!(c.group, pg)
         end
         c.group_size[pg] += 1
 
@@ -580,7 +584,7 @@ end
     @boundscheck if !in(e, c)
         throw(BoundsError(c, e))
     end
-    @inbounds c.data[c.group[c.indices[e.id]]] = v
+    @inbounds c.data[group(c, e.id)] = v
     return v
 end
 
@@ -691,22 +695,26 @@ end
 
 struct GroupedEntityIterator{T}
     c::GroupedComponent{T}
-    id::Int
-end
-    
-function grouped_entities(c::GroupedComponent, data_id::Int)
-    @boundscheck if length(c.data) < data_id
-        throw(BoundsError(c, data_id))
-    end
-    return GroupedEntityIterator(c, data_id)
+    group_id::Int
 end
 
+indices_iterator(g::GroupedEntityIterator) = g
+indices(g::GroupedEntityIterator) = g
+
+function grouped_entities(c::GroupedComponent, group_id::Int)
+    @boundscheck if length(c.data) < group_id
+        throw(BoundsError(c, group_id))
+    end
+    return GroupedEntityIterator(c, group_id)
+end
+
+@inline entity_index(it::GroupedEntityIterator, i::Int) = @inbounds it.c.indices.packed[findnext(isequal(it.group_id), it.c.group, i)]
+    
 @inline function Base.iterate(i::GroupedEntityIterator, state = 1)
-    state > i.c.group_size[i.id] && return nothing
-    n = findnext(isequal(i.id), i.c.group, state)
+    state > i.c.group_size[i.group_id] && return nothing
+    n = findnext(isequal(i.group_id), i.c.group, state)
     n === nothing && return n
-    e = Entity(i.c.indices[n])
-    return e, n + 1
+    return Entity(i.c.indices[n]), n + 1
 end
 
 Base.getindex(iterator::GroupedEntityIterator, i) = iterate(iterator, i)[1]
@@ -714,6 +722,11 @@ Base.getindex(iterator::GroupedEntityIterator, i) = iterate(iterator, i)[1]
 Base.IteratorSize(::Type{GroupedEntityIterator}) = Base.HasLength()
 Base.IteratorEltype(::Type{GroupedEntityIterator}) = Base.HasEltype()
 Base.eltype(::GroupedEntityIterator) = Entity
-Base.length(i::GroupedEntityIterator) = i.c.group_size[i.id]
+Base.eltype(::Type{GroupedEntityIterator{T}}) where {T} = T
+Base.length(i::GroupedEntityIterator) = i.c.group_size[i.group_id]
 
 
+Base.@propagate_inbounds @inline Base.in(e::Entity, it::GroupedEntityIterator) =
+    in(e, it.c) && @inbounds group(it.c, e) == it.group_id
+Base.@propagate_inbounds @inline Base.in(e::Int, it::GroupedEntityIterator) =
+    in(e, it.c.indices) && @inbounds group(it.c, e) == it.group_id
