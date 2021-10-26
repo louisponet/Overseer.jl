@@ -240,7 +240,7 @@ end
 Base.collect(s::Indices) = copy(s.packed)
 
 function Base.permute!(s::Indices, p)
-    permute!(s.packed)
+    permute!(s.packed, p)
     @inbounds for (i, eid) in s.packed
         p[i] == i && continue #nothing was changed
         pageid, offset = pageid_offset(eid)
@@ -255,6 +255,8 @@ end
 
 Base.IteratorSize(::IndicesIterator) = Base.SizeUnknown()
 Base.IteratorEltype(::IndicesIterator) = Base.HasEltype()
+Base.in(i::Int, it::IndicesIterator) = it.test(i)
+
 @inline indices(i::Indices) = i
 
 @inline function Base.length(it::IndicesIterator)

@@ -232,6 +232,8 @@ Base.IteratorEltype(::EntityIterator) = Base.HasEltype()
 Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{TT}
 Base.length(i::EntityIterator) = length(i.it)
 
+Base.in(e::AbstractEntity, i::EntityIterator) = in(e.id, i.it)
+
 struct EntityState{TT<:Tuple} <: AbstractEntity
     e::Entity
     components::TT
@@ -329,7 +331,7 @@ end
 end
 
 Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
-    
+
 macro entities_in(indices_expr)
     expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
     if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
@@ -511,7 +513,7 @@ Base.@propagate_inbounds @inline function Base.parent(c::GroupedComponent, i::In
     @boundscheck if i > length(c.data)
         throw(BoundsError(c, i))
     end
-    return @inbounds Entity(c.indices[findfirst(isequal(i), c.group)])
+    return @inbounds Entity(c.indices.packed[findfirst(isequal(i), c.group)])
 end
 Base.@propagate_inbounds @inline Base.parent(c::GroupedComponent, e::Entity) = parent(c, group(c, e))
     
@@ -563,8 +565,8 @@ end
             if c.group_size[eg] == 1
                 # if this entity is the only one holding onto a value, remove 
                 # that value and cleanup group indices
-                deleteat!(c.data, idx)
-                deleteat!(c.group_size, idx)
+                deleteat!(c.data, eg)
+                deleteat!(c.group_size, eg)
                 for i in eachindex(c.group)
                     c.group[i] = c.group[i] - (c.group[i] > eg)
                 end
@@ -721,7 +723,7 @@ end
     state > i.c.group_size[i.group_id] && return nothing
     n = findnext(isequal(i.group_id), i.c.group, state)
     n === nothing && return n
-    return Entity(i.c.indices[n]), n + 1
+    return Entity(i.c.indices.packed[n]), n + 1
 end
 
 Base.getindex(iterator::GroupedEntityIterator, i) = iterate(iterator, i)[1]

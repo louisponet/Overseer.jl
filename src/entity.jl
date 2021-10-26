@@ -42,3 +42,5 @@ end
 Base.iterate(e::Entity, state=1) = state > 1 ? nothing : (e, state+1)
 
 const EMPTY_ENTITY = Entity(0)
+
+Base.:(==)(e1::AbstractEntity, e2::AbstractEntity) = e1.id == e2.id 
