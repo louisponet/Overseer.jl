@@ -260,7 +260,7 @@ Base.IteratorEltype(::IndicesIterator) = Base.HasEltype()
 @inline function Base.length(it::IndicesIterator)
     it_length = 0
     for i = 1:length(it.shortest)
-        @inbounds if it.test(indices(it.shortest).packed[i])
+        @inbounds if it.test(entity_index(it.shortest, i))
             it_length += 1
         end
     end
