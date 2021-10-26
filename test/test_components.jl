@@ -344,5 +344,9 @@ end
         push!(order, e.e)
     end
     @test order == [Entity(1), Entity(3), Entity(2)]
+
+    @test parent(c5, 2) == Entity(2)
+    @test parent(c5, 1) == Entity(1)
+    @test parent(c5, Entity(3)) == Entity(1)
        
 end

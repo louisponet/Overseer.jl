@@ -507,6 +507,13 @@ Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, i::Integer) 
 Base.@propagate_inbounds @inline group(c::GroupedComponent, e::AbstractEntity) = c.group[c.indices[e.id]]
 Base.@propagate_inbounds @inline group(c::GroupedComponent, e::Int) = c.group[c.indices[e]]
 
+Base.@propagate_inbounds @inline function Base.parent(c::GroupedComponent, i::Int)
+    @boundscheck if i > length(c.data)
+        throw(BoundsError(c, i))
+    end
+    return @inbounds Entity(c.indices[findfirst(isequal(i), c.group)])
+end
+Base.@propagate_inbounds @inline Base.parent(c::GroupedComponent, e::Entity) = parent(c, group(c, e))
     
 function is_unique_in(value, collection)
     count = 0
