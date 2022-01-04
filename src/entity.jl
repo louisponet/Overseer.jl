@@ -32,7 +32,7 @@ function Entity(m::AbstractLedger, parent::Entity, datas::ComponentData...)
 		m[e] = d
 	end
 	for (T, component) in components(m)
-		if component isa GroupedComponent && in(parent, component) && !in(e, component)
+		if component isa PooledComponent && in(parent, component) && !in(e, component)
 			component[e] = parent
 		end
 	end

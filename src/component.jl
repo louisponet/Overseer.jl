@@ -31,18 +31,6 @@ end
 Component{T}() where {T} = Component(Indices(), T[])
 
 
-"""
-A shared component works very much like a normal component except that it tries to not have duplicate
-data for different entities. This should be used for very large `ComponentData`. 
-"""
-struct SharedComponent{T <: ComponentData} <: AbstractComponent{T}
-    indices::Indices
-    data   ::Vector{Int} # saves the indices into the shared for each of the entities
-    shared ::Vector{T}
-end
-
-SharedComponent{T}() where {T <: ComponentData} = SharedComponent{T}(Indices(), Int[], T[])
-
 ##### BASE Extensions ####
 Base.eltype(::Type{<:AbstractComponent{T}}) where T = T
 
@@ -67,9 +55,7 @@ function Base.permute!(c::AbstractComponent, permvec)
 end
 
 Base.@propagate_inbounds @inline Base.getindex(c::Component,       e::AbstractEntity)  = c.data[c.indices[e.id]]
-Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, e::AbstractEntity)  = c.shared[c.data[c.indices[e.id]]]
 Base.@propagate_inbounds @inline Base.getindex(c::Component,       i::Integer) = c.data[i]
-Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) = c.shared[c.data[i]]
 
 @inline function Base.setindex!(c::Component{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
@@ -79,19 +65,6 @@ Base.@propagate_inbounds @inline Base.getindex(c::SharedComponent, i::Integer) =
         return v
     end
     @inbounds c.data[c.indices[eid]] = v
-    return v
-end
-
-@inline function Base.setindex!(c::SharedComponent{T}, v::T, e::AbstractEntity) where {T}
-    eid = e.id
-    t_shared_id = findfirst(x->x == v, c.shared)
-    shared_id = t_shared_id === nothing ? (push!(c.shared, v); length(c.shared)) : t_shared_id
-    @boundscheck if !in(e, c)
-        push!(c.indices, eid)
-        push!(c.data, shared_id)
-        return v
-    end
-    @inbounds c.data[c.indices[eid]] = shared_id
     return v
 end
 
@@ -109,31 +82,12 @@ end
     end
 end
         
-@inline function Base.pointer(c::SharedComponent{T}, e::AbstractEntity) where {T}
-    if e.id in c.indices
-        if T.mutable
-            unsafe_load(reinterpret(Ptr{Ptr{T}}, pointer(c.shared, @inbounds c.data[c.indices[e.id]])))
-        else
-            return pointer(c.shared, @inbounds c.data[c.indices[e.id]])
-        end
-    else
-        return Ptr{T}()
-    end
-end
 # @inline Base.pointer(c::Component{T}, e::Entity) where {T}=
 #     pointer(c.data, @inbounds c.indices[e.id])
-# @inline Base.pointer(c::SharedComponent{T}, e::Entity) where {T} =
-#     pointer(c.shared, @inbounds c.data[c.indices[e.id]])
 
 function Base.empty!(c::Component)
     empty!(c.indices)
     empty!(c.data)
-    return c
-end
-function Base.empty!(c::SharedComponent)
-    empty!(c.indices)
-    empty!(c.data)
-    empty!(c.shared)
     return c
 end
 
@@ -166,23 +120,7 @@ end
 
 Base.pop!(c::Component, e::AbstractEntity) = pop_indices_data!(c, e)
 
-function Base.pop!(c::SharedComponent, e::AbstractEntity)
-    i = pop_indices_data!(c, e)
-    idvec = c.data
-    val = c.shared[i]
-    if !any(isequal(i), idvec)
-        for j in 1:length(idvec)
-            if idvec[j] > i
-                idvec[j] -= 1
-            end
-        end
-        deleteat!(c.shared, i)
-    end
-    return val
-end
-
 @inline Base.iterate(c::Component, args...) = iterate(c.data, args...)
-@inline Base.iterate(c::SharedComponent, args...) = iterate(c.shared, args...)
 
 function ensure_entity_id!(c::AbstractComponent, e::Int, id::Int)
     indices = c.indices
@@ -206,8 +144,6 @@ function shared_entity_ids(cs)
     end
     return shared_entity_ids
 end
-
-Base.sortperm(c::SharedComponent) = sortperm(c.data)
 
 @inline function Base.hash(c::C, h::UInt) where {C <: AbstractComponent}
     for f in nfields(c)
@@ -473,49 +409,35 @@ function _component(typedef, mod)
     end
 end
 
-macro shared_component(typedef)
-    return esc(Overseer._shared_component(typedef, __module__))
-end
-
-function _shared_component(typedef, mod)
-    t = process_typedef(typedef, mod)
-    t1, tn = t 
-    return quote
-        $t1
-       	Overseer.component_type(::Type{$tn}) = Overseer.SharedComponent
-    end
-end
-
-
 ################################################################################
 
-struct ApplyToGroup
+struct ApplyToPool
     e::Entity
 end
 
-Base.parent(e::Entity) = ApplyToGroup(e)
+Base.parent(e::Entity) = ApplyToPool(e)
 
-struct GroupedComponent{T <: ComponentData} <: AbstractComponent{T}
+struct PooledComponent{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
-    group::Vector{Int}
-    group_size::Vector{Int}
+    pool::Vector{Int}
+    pool_size::Vector{Int}
     data::Vector{T}
 end
 
-GroupedComponent{T}() where {T <: ComponentData} = GroupedComponent{T}(Indices(), Int[], Int[], T[])
+PooledComponent{T}() where {T <: ComponentData} = PooledComponent{T}(Indices(), Int[], Int[], T[])
 
-Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, e::AbstractEntity) = c.data[group(c, e)]
-Base.@propagate_inbounds @inline Base.getindex(c::GroupedComponent, i::Integer) = c.data[c.group[i]]
-Base.@propagate_inbounds @inline group(c::GroupedComponent, e::AbstractEntity) = c.group[c.indices[e.id]]
-Base.@propagate_inbounds @inline group(c::GroupedComponent, e::Int) = c.group[c.indices[e]]
+Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, e::AbstractEntity) = c.data[pool(c, e)]
+Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, i::Integer) = c.data[c.pool[i]]
+Base.@propagate_inbounds @inline pool(c::PooledComponent, e::AbstractEntity) = c.pool[c.indices[e.id]]
+Base.@propagate_inbounds @inline pool(c::PooledComponent, e::Int) = c.pool[c.indices[e]]
 
-Base.@propagate_inbounds @inline function Base.parent(c::GroupedComponent, i::Int)
+Base.@propagate_inbounds @inline function Base.parent(c::PooledComponent, i::Int)
     @boundscheck if i > length(c.data)
         throw(BoundsError(c, i))
     end
-    return @inbounds Entity(c.indices.packed[findfirst(isequal(i), c.group)])
+    return @inbounds Entity(c.indices.packed[findfirst(isequal(i), c.pool)])
 end
-Base.@propagate_inbounds @inline Base.parent(c::GroupedComponent, e::Entity) = parent(c, group(c, e))
+Base.@propagate_inbounds @inline Base.parent(c::PooledComponent, e::Entity) = parent(c, pool(c, e))
     
 function is_unique_in(value, collection)
     count = 0
@@ -527,26 +449,26 @@ end
 
 # c[entity] = value
 # set value of <only> this entity
-@inline function Base.setindex!(c::GroupedComponent{T}, v::T, e::AbstractEntity) where {T}
+@inline function Base.setindex!(c::PooledComponent{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
     @inbounds if in(e, c)
         pid = c.indices[eid]
-        g = c.group[pid]
-        if c.group_size[g] == 1
-            # the entity already has its own (otherwise empty) group - adjust value
+        g = c.pool[pid]
+        if c.pool_size[g] == 1
+            # the entity already has its own (otherwise empty) pool - adjust value
             c.data[g] = v
         else
-            # the entity is part of a larger group - create a new one
-            c.group_size[g] -= 1
+            # the entity is part of a larger pool - create a new one
+            c.pool_size[g] -= 1
             push!(c.data, v)
-            push!(c.group_size, 1)
-            c.group[pid] = length(c.data)
+            push!(c.pool_size, 1)
+            c.pool[pid] = length(c.data)
         end
     else
         # the entity is not in the component - add it
         push!(c.indices, eid)
-        push!(c.group, length(c.data)+1)
-        push!(c.group_size, 1)
+        push!(c.pool, length(c.data)+1)
+        push!(c.pool_size, 1)
         push!(c.data, v)
     end
     return v
@@ -554,83 +476,83 @@ end
 
 # c[entity] = parent
 # set the value of this entity to that of parent
-@inline function Base.setindex!(c::GroupedComponent, p::AbstractEntity, e::AbstractEntity)
+@inline function Base.setindex!(c::PooledComponent, p::AbstractEntity, e::AbstractEntity)
     @boundscheck if !in(p, c)
         throw(BoundsError(c, p))
     end
     @inbounds begin
-        pg = group(c, p)
+        pg = pool(c, p)
         if in(e, c)
-            eg = group(c, e)
-            if c.group_size[eg] == 1
+            eg = pool(c, e)
+            if c.pool_size[eg] == 1
                 # if this entity is the only one holding onto a value, remove 
-                # that value and cleanup group indices
+                # that value and cleanup pool indices
                 deleteat!(c.data, eg)
-                deleteat!(c.group_size, eg)
-                for i in eachindex(c.group)
-                    c.group[i] = c.group[i] - (c.group[i] > eg)
+                deleteat!(c.pool_size, eg)
+                for i in eachindex(c.pool)
+                    c.pool[i] = c.pool[i] - (c.pool[i] > eg)
                 end
             else
-                c.group_size[eg] -= 1
+                c.pool_size[eg] -= 1
             end
-            # adjust group index either way
-            c.group[c.indices[e.id]] = pg
+            # adjust pool index either way
+            c.pool[c.indices[e.id]] = pg
         else
             # if the entity is not in there we have to add it
             push!(c.indices, e.id)
-            push!(c.group, pg)
+            push!(c.pool, pg)
         end
-        c.group_size[pg] += 1
+        c.pool_size[pg] += 1
 
         return c[p]
     end
 end
 
 # c[ParentGroup(entity)] = value
-# set the value for all entities grouped with entity
-@inline function Base.setindex!(c::GroupedComponent{T}, v::T, x::ApplyToGroup) where {T}
+# set the value for all entities pooled with entity
+@inline function Base.setindex!(c::PooledComponent{T}, v::T, x::ApplyToPool) where {T}
     e = x.e
     @boundscheck if !in(e, c)
         throw(BoundsError(c, e))
     end
-    @inbounds c.data[group(c, e.id)] = v
+    @inbounds c.data[pool(c, e.id)] = v
     return v
 end
 
 
-Base.length(c::GroupedComponent) = length(c.group)
+Base.length(c::PooledComponent) = length(c.pool)
 
-function Base.empty!(c::GroupedComponent)
+function Base.empty!(c::PooledComponent)
     empty!(c.indices)
-    empty!(c.group)
-    empty!(c.group_size)
+    empty!(c.pool)
+    empty!(c.pool_size)
     empty!(c.data)
     return c
 end
 
 
-function Base.pop!(c::GroupedComponent, e::AbstractEntity)
+function Base.pop!(c::PooledComponent, e::AbstractEntity)
     @boundscheck if !in(e, c)
         throw(BoundsError(c, e))
     end
 
     @inbounds begin
         id = c.indices[e.id]
-        g = c.group[id]
+        g = c.pool[id]
 
-        c.group[id] = c.group[end]
-        c.group_size[g] -= 1
-        pop!(c.group)
+        c.pool[id] = c.pool[end]
+        c.pool_size[g] -= 1
+        pop!(c.pool)
         pop!(c.indices, e.id)
 
         val = c.data[g]
 
-        if c.group_size[g] == 0
+        if c.pool_size[g] == 0
             deleteat!(c.data, g)
-            deleteat!(c.group_size, g)
-            for i in eachindex(c.group)
-                if c.group[i] > g
-                    c.group[i] -= 1
+            deleteat!(c.pool_size, g)
+            for i in eachindex(c.pool)
+                if c.pool[i] > g
+                    c.pool[i] -= 1
                 end
             end
         end
@@ -639,58 +561,58 @@ function Base.pop!(c::GroupedComponent, e::AbstractEntity)
     return val
 end
 
-@inline Base.iterate(c::GroupedComponent, args...) = iterate(c.data, args...)
-Base.sortperm(c::GroupedComponent) = sortperm(c.group)
+@inline Base.iterate(c::PooledComponent, args...) = iterate(c.data, args...)
+Base.sortperm(c::PooledComponent) = sortperm(c.pool)
 
 
-macro grouped_component(typedef)
-    return esc(Overseer._grouped_component(typedef, __module__))
+macro pooled_component(typedef)
+    return esc(Overseer._pooled_component(typedef, __module__))
 end
 
-function _grouped_component(typedef, mod)
+function _pooled_component(typedef, mod)
     t = process_typedef(typedef, mod)
     t1, tn = t 
     return quote
         $t1
-       	Overseer.component_type(::Type{$tn}) = Overseer.GroupedComponent
+       	Overseer.component_type(::Type{$tn}) = Overseer.PooledComponent
     end
 end
 
-function make_unique!(c::GroupedComponent)
+function make_unique!(c::PooledComponent)
     @inbounds begin
-        # Go through all groups and check if a later group has the same value.
-        # If it does mark the later group empty.
-        for i in eachindex(c.group)
-            g0 = c.group[i]
-            if c.group_size[g0] > 0
+        # Go through all pools and check if a later pool has the same value.
+        # If it does mark the later pool empty.
+        for i in eachindex(c.pool)
+            g0 = c.pool[i]
+            if c.pool_size[g0] > 0
                 v0 = c.data[g0]
-                for j in i+1:length(c.group)
-                    g = c.group[j]
-                    if c.group_size[g] > 0 && c.data[g] == v0
-                        c.group_size[g] -= 1
-                        c.group_size[g0] += 1
-                        c.group[j] = g0
+                for j in i+1:length(c.pool)
+                    g = c.pool[j]
+                    if c.pool_size[g] > 0 && c.data[g] == v0
+                        c.pool_size[g] -= 1
+                        c.pool_size[g0] += 1
+                        c.pool[j] = g0
                     end
                 end
             end
         end
 
-        # Go through all groups again and replace empty groups (i.e. its data 
-        # and group_size) by the current last group. Adjust group indices 
+        # Go through all pools again and replace empty pools (i.e. its data 
+        # and pool_size) by the current last pool. Adjust pool indices 
         # accordingly.
         i = 1
-        while i <= length(c.group_size)
-            if c.group_size[i] == 0
-                if i == length(c.group_size)
-                    pop!(c.group_size)
+        while i <= length(c.pool_size)
+            if c.pool_size[i] == 0
+                if i == length(c.pool_size)
+                    pop!(c.pool_size)
                     pop!(c.data)
                     break
                 else
-                    N = length(c.group_size)
-                    c.group_size[i] = pop!(c.group_size)
+                    N = length(c.pool_size)
+                    c.pool_size[i] = pop!(c.pool_size)
                     c.data[i] = pop!(c.data)
-                    for j in eachindex(c.group)
-                        c.group[j] = c.group[j] == N ? i : c.group[j]
+                    for j in eachindex(c.pool)
+                        c.pool[j] = c.pool[j] == N ? i : c.pool[j]
                     end
                 end
             else
@@ -702,40 +624,40 @@ function make_unique!(c::GroupedComponent)
     return
 end
 
-struct GroupedEntityIterator{T}
-    c::GroupedComponent{T}
-    group_id::Int
+struct PooledEntityIterator{T}
+    c::PooledComponent{T}
+    pool_id::Int
 end
 
-indices_iterator(g::GroupedEntityIterator) = g
-indices(g::GroupedEntityIterator) = g
+indices_iterator(g::PooledEntityIterator) = g
+indices(g::PooledEntityIterator) = g
 
-function entity_group(c::GroupedComponent, group_id::Int)
-    @boundscheck if length(c.data) < group_id
-        throw(BoundsError(c, group_id))
+function entity_pool(c::PooledComponent, pool_id::Int)
+    @boundscheck if length(c.data) < pool_id
+        throw(BoundsError(c, pool_id))
     end
-    return GroupedEntityIterator(c, group_id)
+    return PooledEntityIterator(c, pool_id)
 end
 
-@inline entity_index(it::GroupedEntityIterator, i::Int) = @inbounds it.c.indices.packed[findnext(isequal(it.group_id), it.c.group, i)]
+@inline entity_index(it::PooledEntityIterator, i::Int) = @inbounds it.c.indices.packed[findnext(isequal(it.pool_id), it.c.pool, i)]
     
-@inline function Base.iterate(i::GroupedEntityIterator, state = 1)
-    state > i.c.group_size[i.group_id] && return nothing
-    n = findnext(isequal(i.group_id), i.c.group, state)
+@inline function Base.iterate(i::PooledEntityIterator, state = 1)
+    state > i.c.pool_size[i.pool_id] && return nothing
+    n = findnext(isequal(i.pool_id), i.c.pool, state)
     n === nothing && return n
     return Entity(i.c.indices.packed[n]), n + 1
 end
 
-Base.getindex(iterator::GroupedEntityIterator, i) = iterate(iterator, i)[1]
+Base.getindex(iterator::PooledEntityIterator, i) = iterate(iterator, i)[1]
     
-Base.IteratorSize(::Type{GroupedEntityIterator}) = Base.HasLength()
-Base.IteratorEltype(::Type{GroupedEntityIterator}) = Base.HasEltype()
-Base.eltype(::GroupedEntityIterator) = Entity
-Base.eltype(::Type{GroupedEntityIterator{T}}) where {T} = T
-Base.length(i::GroupedEntityIterator) = i.c.group_size[i.group_id]
+Base.IteratorSize(::Type{PooledEntityIterator}) = Base.HasLength()
+Base.IteratorEltype(::Type{PooledEntityIterator}) = Base.HasEltype()
+Base.eltype(::PooledEntityIterator) = Entity
+Base.eltype(::Type{PooledEntityIterator{T}}) where {T} = T
+Base.length(i::PooledEntityIterator) = i.c.pool_size[i.pool_id]
 
 
-Base.@propagate_inbounds @inline Base.in(e::Entity, it::GroupedEntityIterator) =
-    in(e, it.c) && @inbounds group(it.c, e) == it.group_id
-Base.@propagate_inbounds @inline Base.in(e::Int, it::GroupedEntityIterator) =
-    in(e, it.c.indices) && @inbounds group(it.c, e) == it.group_id
+Base.@propagate_inbounds @inline Base.in(e::Entity, it::PooledEntityIterator) =
+    in(e, it.c) && @inbounds pool(it.c, e) == it.pool_id
+Base.@propagate_inbounds @inline Base.in(e::Int, it::PooledEntityIterator) =
+    in(e, it.c.indices) && @inbounds pool(it.c, e) == it.pool_id

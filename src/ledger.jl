@@ -12,7 +12,6 @@ mutable struct Ledger <: AbstractLedger
 	to_delete    ::Vector{Entity}
 	components   ::Dict{DataType, AbstractComponent}
 	groups       ::Vector{AbstractGroup}
-	# components   ::Dict{DataType, Union{Component,SharedComponent}}
 
 	stages::Vector{Stage}
 end

@@ -10,12 +10,12 @@ Test1() = Test1(0)
     p::Int = 1
 end
 
-@shared_component struct Test3
+@pooled_component struct Test3
     p::Int
 end
 Test3() = Test3(1)
 
-@shared_component @with_kw struct Test4
+@pooled_component @with_kw struct Test4
     p::Int = 1
 end
 
@@ -50,8 +50,8 @@ end
 @testset "Basic Component definitions" begin
     @test Overseer.component_type(Test1) == Component
     @test Overseer.component_type(Test2) == Component
-    @test Overseer.component_type(Test3) == SharedComponent
-    @test Overseer.component_type(Test4) == SharedComponent
+    @test Overseer.component_type(Test3) == PooledComponent
+    @test Overseer.component_type(Test4) == PooledComponent
 
     for (c, es) in zip((c1, c2, c3, c4), (entities1, entities2, entities3, entities4))
         for e in es
@@ -230,12 +230,12 @@ end
 end
 
 
-@testset "GroupedComponent" begin
-    @grouped_component struct Test5
+@testset "PooledComponent" begin
+    @pooled_component struct Test5
         x::Int
     end
 
-    @test Overseer.component_type(Test5) == Overseer.GroupedComponent
+    @test Overseer.component_type(Test5) == Overseer.PooledComponent
     c5 = Overseer.component_type(Test5){Test5}()
 
     p1 = Entity(1)
@@ -257,7 +257,7 @@ end
     end
     @test count == 10
     @test _sum == 15
-    @test c5.group_size == [5, 5]
+    @test c5.pool_size == [5, 5]
 
     # check for no duplication
     @test length(c5.data) == 2
@@ -269,7 +269,7 @@ end
     @test length(c5) == 9
     @test c5[p2] == Test5(2)
     @test !isempty(c5)
-    @test c5.group_size == [4, 5]
+    @test c5.pool_size == [4, 5]
 
     count = 0
     _sum = 0
@@ -280,7 +280,7 @@ end
     @test count == 9
     @test _sum == 14
 
-    # adjust parent value of group
+    # adjust parent value of pool
     c5[parent(p2)] = Test5(1)
     count = 0
     _sum = 0
@@ -290,7 +290,7 @@ end
     end
     @test count == 9
     @test _sum == 9
-    @test c5.group_size == [4, 5]
+    @test c5.pool_size == [4, 5]
 
     # adjust single value
     c5[p2] = Test5(2)
@@ -303,24 +303,24 @@ end
     @test count == 9
     @test _sum == 10
     @test length(c5.data) == 3
-    @test c5.group_size == [4, 4, 1]
+    @test c5.pool_size == [4, 4, 1]
 
     Overseer.make_unique!(c5)
     @test length(c5.data) == 2
-    @test c5.group_size == [1, 8]
+    @test c5.pool_size == [1, 8]
     @test c5.data == [Test5(2), Test5(1)]
 
-    # remove all entites of a group
+    # remove all entites of a pool
     for i in 3:10
         pop!(c5, Entity(i))
     end
     @test length(c5.data) == 1
     @test length(c5) == 1
-    @test c5.group_size == [1]
+    @test c5.pool_size == [1]
 
     empty!(c5)
     @test isempty(c5)
-    @test c5.group_size == Int[]
+    @test c5.pool_size == Int[]
 
     e1 = Entity(1)
     e2 = Entity(2)
@@ -329,18 +329,18 @@ end
     c5[e3] = e1
     c5[e2] = Test5(1)
 
-    @test length(collect(entity_group(c5, 1))) == c5.group_size[1]
-    @test collect(entity_group(c5, 1)) == [Entity(1), Entity(3)]
+    @test length(collect(entity_pool(c5, 1))) == c5.pool_size[1]
+    @test collect(entity_pool(c5, 1)) == [Entity(1), Entity(3)]
 
     c1 = Component{Test1}()
     c1[e1] = Test1(1)
     c1[e2] = Test1(2)
     c1[e3] = Test1(3)
     order = Entity[]
-    for e in @entities_in(entity_group(c5, 1) && c1)
+    for e in @entities_in(entity_pool(c5, 1) && c1)
         push!(order, e.e)
     end
-    for e in @entities_in(entity_group(c5, 2) && c1)
+    for e in @entities_in(entity_pool(c5, 2) && c1)
         push!(order, e.e)
     end
     @test order == [Entity(1), Entity(3), Entity(2)]
