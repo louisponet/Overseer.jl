@@ -89,13 +89,13 @@ Base.copy(m::AbstractLedger) = Ledger(copy(entities(m)),
 
 function Base.getindex(m::AbstractLedger, e::AbstractEntity)
 	entity_assert(m, e)		
-	data = ComponentData[]
+	data = AbstractComponent[]
 	for c in values(components(m))
 		if in(e, c)
-			push!(data, c[e])
+			push!(data, c)
 		end
 	end
-	return data
+	return EntityState(e, (data...,))
 end
 
 function Base.getindex(v::Vector{Stage}, s::Symbol)
