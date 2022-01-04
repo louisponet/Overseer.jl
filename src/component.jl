@@ -258,6 +258,9 @@ end
     
 @inline Base.@propagate_inbounds Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData} =
     component(e, T)[e] = x
+    
+@inline Base.@propagate_inbounds Base.length(::EntityState{TT}) where {TT} = length(TT.parameters)
+    
  
 @inline function Base.iterate(i::EntityIterator, state = 1)
     n = iterate(i.it, state)
