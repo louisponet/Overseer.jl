@@ -175,6 +175,9 @@ struct EntityState{TT<:Tuple} <: AbstractEntity
     components::TT
 end
 
+Entity(e::EntityState) = e.e
+Base.convert(::Type{Entity}, e::EntityState) = Entity(e)
+
 # TODO: Cleanup, can these two be merged?
 @generated function Base.getproperty(e::EntityState{TT}, f::Symbol) where {TT}
     fn_to_DT = Dict{Symbol, DataType}()
@@ -253,6 +256,7 @@ end
         getfield(e,:components)[$id]
     end
 end
+
 
 @inline Base.@propagate_inbounds Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData} = component(e, T)[e.e]
     
