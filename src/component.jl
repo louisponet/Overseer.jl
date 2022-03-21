@@ -177,6 +177,14 @@ end
 
 Entity(e::EntityState) = e.e
 Base.convert(::Type{Entity}, e::EntityState) = Entity(e)
+function Base.show(io::IO, e::EntityState)
+    println(io, "$(typeof(e)):")
+    println(io, "$(e.e)")
+    println(io, "Components:")
+    for c in e.components
+        println(io, "$(c[e])")
+    end
+end
 
 # TODO: Cleanup, can these two be merged?
 @generated function Base.getproperty(e::EntityState{TT}, f::Symbol) where {TT}
@@ -276,7 +284,7 @@ end
 Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
 
 macro entities_in(indices_expr)
-    expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
+    expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
     if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
         return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])), ($(t_sets[1]),))))
     else
@@ -306,11 +314,11 @@ macro entities_in(indices_expr)
 end
 
 macro entities_in(ledger, indices_expr)
-    expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
+    expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
     t_comp_defs = quote
     end
     comp_sym_map = Dict()
-    for s in [t_sets; t_orsets]
+    for s in [t_sets; t_notsets; t_orsets]
         sym = gensym()
         t_comp_defs = quote
             $t_comp_defs
@@ -438,6 +446,8 @@ Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, i::Integer) =
 Base.@propagate_inbounds @inline pool(c::PooledComponent, e::AbstractEntity) = c.pool[c.indices[e.id]]
 Base.@propagate_inbounds @inline pool(c::PooledComponent, e::Int) = c.pool[c.indices[e]]
 
+npools(c::PooledComponent) = length(c.data)
+
 Base.@propagate_inbounds @inline function Base.parent(c::PooledComponent, i::Int)
     @boundscheck if i > length(c.data)
         throw(BoundsError(c, i))
@@ -525,7 +535,6 @@ end
     @inbounds c.data[pool(c, e.id)] = v
     return v
 end
-
 
 Base.length(c::PooledComponent) = length(c.pool)
 

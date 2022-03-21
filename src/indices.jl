@@ -282,7 +282,7 @@ Base.@propagate_inbounds @inline entity_index(c::Union{<:AbstractComponent, Indi
 end
 
 macro indices_in(indices_expr)
-    expr, t_sets, t_orsets = expand_indices_bool(indices_expr)
+    expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
     return esc(quote
         sets = $(Expr(:tuple, t_sets...))
         orsets = $(Expr(:tuple, t_orsets...))
@@ -307,13 +307,14 @@ macro indices_in(indices_expr)
 end
 
 function expand_indices_bool(expr)
-    if expr isa Symbol || expr.head in (:., :ref, :curly) || (expr.head == :call && expr.args[1] != :!)
-        return Expr(:call, :in, :x, expr), [expr], Symbol[]
+    if expr isa Symbol || expr.head in (:., :ref, :curly)  || (expr.head == :call && expr.args[1] != :!)
+        return Expr(:call, :in, :x, expr), [expr], Symbol[], Symbol[]
     end
     # if !in(expr.head, (:||, :&&)) && !(expr.head == :call && expr.args[1] in == :!)
     #     error("Can only expand expressions with ||, && and !")
     # end
     sets = Union{Symbol, Expr}[]
+    notsets = Union{Symbol, Expr}[]
     orsets = Union{Symbol, Expr}[]
     if expr.args[1] == :!
         nothing
@@ -325,9 +326,10 @@ function expand_indices_bool(expr)
         end
         expr.args[1] = Expr(:call, :in, :x, expr.args[1])
     else
-        expr_, sets_, orsets_ = expand_indices_bool(expr.args[1])
+        expr_, sets_, notsets_, orsets_ = expand_indices_bool(expr.args[1])
         append!(sets,  sets_)
         append!(orsets,  orsets_)
+        append!(notsets,  notsets_)
         expr.args[1] = expr_
     end
     if isa(expr.args[2], Symbol)
@@ -337,15 +339,20 @@ function expand_indices_bool(expr)
             else
                 push!(orsets, expr.args[2])
             end
+        else
+            push!(notsets, expr.args[2])
         end
         expr.args[2] = Expr(:call, :in, :x, expr.args[2])
     else
-        expr_, sets_, orsets_ = expand_indices_bool(expr.args[2])
-        append!(sets, sets_)
+        expr_, sets_, notsets_, orsets_ = expand_indices_bool(expr.args[2])
+        if expr.args[1] != :!
+            append!(sets, sets_)
+        end
         append!(orsets, orsets_)
+        append!(notsets, notsets_)
         expr.args[2] = expr_
     end
-    return expr, sets, orsets
+    return expr, sets, notsets, orsets
 end
 
 Base.@propagate_inbounds function swap_order!(ids::Indices, from_page::Page, to_page::Page, packed_id1::Int, packed_id2::Int)
