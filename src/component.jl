@@ -119,6 +119,7 @@ function pop_indices_data!(c::AbstractComponent, e::AbstractEntity)
 end
 
 Base.pop!(c::Component, e::AbstractEntity) = pop_indices_data!(c, e)
+Base.pop!(c::Component) = EntityState(Entity(pop!(c.indices)), (pop!(c.data),))
 
 @inline Base.iterate(c::Component, args...) = iterate(c.data, args...)
 
@@ -182,7 +183,11 @@ function Base.show(io::IO, e::EntityState)
     println(io, "$(e.e)")
     println(io, "Components:")
     for c in e.components
-        println(io, "$(c[e])")
+        if c isa AbstractComponent
+            println(io, "$(c[e])")
+        else
+            println(io, "$c")
+        end
     end
 end
 
@@ -192,7 +197,8 @@ end
     ex = :(getfield(e, f))
     ex = Expr(:elseif, :(f === :id), :(return getfield(getfield(e, :e), :id)::Int), ex)
     for PDT in TT.parameters
-        DT = eltype(PDT)
+        DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
+        
         for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
             if haskey(fn_to_DT, fn)
                 fnq = QuoteNode(fn)
@@ -227,7 +233,7 @@ end
     ex = :(setfield!(e, f))
     ex = Expr(:elseif, :(f === :id), :(return setfield!(getfield(e, :e), :id)::Int, val), ex)
     for PDT in TT.parameters
-        DT = eltype(PDT)
+        DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
         for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
             if haskey(fn_to_DT, fn)
                 fnq = QuoteNode(fn)
@@ -258,7 +264,7 @@ end
 end
 
 @generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
-    id = findfirst(x -> eltype(x) == T, TT.parameters)
+    id = findfirst(x -> x <: AbstractComponent ? eltype(x) == T : x == T, TT.parameters)
     return quote
         $(Expr(:meta, :inline))
         getfield(e,:components)[$id]
@@ -266,10 +272,20 @@ end
 end
 
 
-@inline Base.@propagate_inbounds Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData} = component(e, T)[e.e]
+@inline Base.@propagate_inbounds function Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData}
+    t = component(e, T)
+    if t isa AbstractComponent
+        return t[e.e]
+    else
+        return t
+    end
+end
     
-@inline Base.@propagate_inbounds Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData} =
-    component(e, T)[e] = x
+@inline Base.@propagate_inbounds function Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData}
+    t = component(e, T)
+    @assert t isa AbstractComponent "Cannot set a Component in a non referenced EntityState."
+    return t[e] = x
+end
     
 @inline Base.@propagate_inbounds Base.length(::EntityState{TT}) where {TT} = length(TT.parameters)
     
@@ -575,6 +591,26 @@ function Base.pop!(c::PooledComponent, e::AbstractEntity)
     end
 
     return val
+end
+function Base.pop!(c::PooledComponent)
+    @boundscheck if isempty(c)
+        throw(BoundsError(c))
+    end
+    @inbounds begin
+        id = pop!(c.indices)
+        g = pop!(c.pool)
+        val = c.data[g]
+        if c.pool_size[g] == 0
+            deleteat!(c.data, g)
+            deleteat!(c.pool_size, g)
+            for i in eachindex(c.pool)
+                if c.pool[i] > g
+                    c.pool[i] -= 1
+                end
+            end
+        end
+        return EntityState(Entity(id), (val,))
+    end
 end
 
 @inline Base.iterate(c::PooledComponent, args...) = iterate(c.data, args...)
