@@ -657,11 +657,11 @@ end
 
 @inline entity_index(it::PooledEntityIterator, i::Int) = @inbounds it.c.indices.packed[findnext(isequal(it.pool_id), it.c.pool, i)]
     
-@inline function Base.iterate(i::PooledEntityIterator, state = 1)
-    state > i.c.pool_size[i.pool_id] && return nothing
-    n = findnext(isequal(i.pool_id), i.c.pool, state)
+@inline function Base.iterate(i::PooledEntityIterator, state = (1, 1))
+    state[2] > i.c.pool_size[i.pool_id] && return nothing
+    n = findnext(isequal(i.pool_id), i.c.pool, state[1])
     n === nothing && return n
-    return Entity(i.c.indices.packed[n]), n + 1
+    return Entity(i.c.indices.packed[n]), (n + 1, state[2] + 1)
 end
 
 Base.getindex(iterator::PooledEntityIterator, i) = iterate(iterator, i)[1]
