@@ -1,6 +1,7 @@
 update(::S, m::AbstractLedger) where {S<:System}= error("No update method implemented for $S")
 
 requested_components(::System) = ()
+in_components(::System) = ()
 
 const Stage = Pair{Symbol, Vector{System}}
 

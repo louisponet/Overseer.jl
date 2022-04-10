@@ -24,6 +24,7 @@ module Overseer
     include("group.jl")
     include("system.jl")
     include("ledger.jl")
+    include("reactive.jl")
 
     export AbstractLedger, Ledger, System, Stage, Component, PooledComponent, ComponentData, Entity
     export @component, @pooled_component
