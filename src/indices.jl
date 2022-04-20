@@ -67,7 +67,7 @@ end
         return false
     else
         page = @inbounds rev[pageid]
-        return page !== NULL_INT_PAGE && @inbounds page[offset] != 0
+        return page !== NULL_INT_PAGE && !isempty(page) && @inbounds page[offset] != 0
     end
 end
 
@@ -109,7 +109,7 @@ Base.@propagate_inbounds @inline Base.getindex(s::Indices, i::Integer) = getinde
         end
         push!(pages, zeros(Int, INT_PER_PAGE))
         push!(s.counters, 0)
-    elseif pages[pageid] === NULL_INT_PAGE
+    elseif pages[pageid] === NULL_INT_PAGE || isempty(pages[pageid])
         #assign a page to previous null page
         pages[pageid] = zeros(Int, INT_PER_PAGE)
     end
@@ -248,18 +248,20 @@ function Base.permute!(s::Indices, p)
     end
 end
 
-struct IndicesIterator{I, T<:Function}
+abstract type AbstractIndicesIterator end
+
+struct IndicesIterator{I, T<:Function} <: AbstractIndicesIterator
     shortest::I
     test::T
 end
 
-Base.IteratorSize(::IndicesIterator) = Base.SizeUnknown()
-Base.IteratorEltype(::IndicesIterator) = Base.HasEltype()
-Base.in(i::Int, it::IndicesIterator) = it.test(i)
+Base.IteratorSize(::AbstractIndicesIterator) = Base.SizeUnknown()
+Base.IteratorEltype(::AbstractIndicesIterator) = Base.HasEltype()
+Base.in(i::Int, it::AbstractIndicesIterator) = it.test(i)
 
 @inline indices(i::Indices) = i
 
-@inline function Base.length(it::IndicesIterator)
+@inline function Base.length(it::AbstractIndicesIterator)
     it_length = 0
     for i = 1:length(it.shortest)
         @inbounds if it.test(entity_index(it.shortest, i))
@@ -281,29 +283,46 @@ Base.@propagate_inbounds @inline entity_index(c::Union{<:AbstractComponent, Indi
     end
 end
 
-macro indices_in(indices_expr)
-    expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
-    return esc(quote
-        sets = $(Expr(:tuple, t_sets...))
-        orsets = $(Expr(:tuple, t_orsets...))
+struct ReverseIndicesIterator{I, T<:Function} <: AbstractIndicesIterator
+    shortest::I
+    test::T
+end
 
-        if isempty(sets)
-            minlen, minid = findmin(map(length, orsets))
-            t_shortest = orsets[minid]
-        else
-            minlen, minid = findmin(map(length, sets))
-            t_shortest = sets[minid]
+@inline function Base.iterate(it::ReverseIndicesIterator, state=length(it.shortest))
+    # it_length = length(it.shortest)
+    for i=state:-1:1
+        @inbounds id = entity_index(it.shortest, i)
+        if it.test(id)
+            return id, i - 1
         end
-        if $(!isempty(t_orsets))
-            shortest = deepcopy(t_shortest)
-            for s in orsets
-                union!(shortest, s)
+    end
+end
+
+for (m, it) in zip((:indices_in, :reverse_indices_in), (:IndicesIterator, :ReverseIndicesIterator))
+    @eval macro $m(indices_expr)
+        expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
+        return esc(quote
+            sets = $(Expr(:tuple, t_sets...))
+            orsets = $(Expr(:tuple, t_orsets...))
+
+            if isempty(sets)
+                minlen, minid = findmin(map(length, orsets))
+                t_shortest = orsets[minid]
+            else
+                minlen, minid = findmin(map(length, sets))
+                t_shortest = sets[minid]
             end
-        else
-            shortest = t_shortest
-        end
-        Overseer.IndicesIterator(shortest, x -> $expr)
-    end)
+            if $(!isempty(t_orsets))
+                shortest = deepcopy(t_shortest)
+                for s in orsets
+                    union!(shortest, s)
+                end
+            else
+                shortest = t_shortest
+            end
+            $$it(shortest, x -> $expr)
+        end)
+    end
 end
 
 function expand_indices_bool(expr)

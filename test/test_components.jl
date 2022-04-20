@@ -82,6 +82,14 @@ end
         t += e.id
     end
     @test t == 4+6+8+1
+    
+    t = 0
+    for e in @safe_entities_in(((c1 && c3) || c4) && !c2)
+        t += e.id
+    end
+    @test t == 4+6+8+1
+    # @test
+    @test map(x->x.id, collect(@safe_entities_in(((c1 && c3) || c4) && !c2))) == [1, 8, 6, 4]
 
     t = 0
     for e in @entities_in((c1 || c3) && !c2)
@@ -99,6 +107,27 @@ end
         t += e.id
     end
     @test t == sum(2:2:10)
+
+    tc = deepcopy(c1)
+    t = 0
+    for e in @entities_in(tc)
+        t += e.id
+        if e.id == 4
+            pop!(tc, e)
+        end
+    end
+    @test t == sum(2:2:10) - 10
+    
+    tc = deepcopy(c1)
+    t = 0
+    for e in @safe_entities_in(tc)
+        t += e.id
+        if e.id == 4
+            pop!(tc, e)
+        end
+    end
+    @test t == sum(2:2:10)
+    
 end
 
 @testset "Component and entity manipulation" begin

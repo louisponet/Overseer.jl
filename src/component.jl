@@ -15,6 +15,7 @@ end
 component_type(::Type{<:ComponentData}) = Component
  
 @inline indices_iterator(a::AbstractComponent) = a.indices
+@inline reverse_indices_iterator(a::AbstractComponent) = ReverseIndicesIterator(a.indices, i -> true)
 
 """
 The most basic Component type.
@@ -23,7 +24,7 @@ Indexing into a component with an `Entity` will return the data linked to that e
 indexing with a regular `Int` will return directly the `ComponentData` that is stored in the data
 vector at that index, i.e. generally not the storage linked to the `Entity` with that `Int` as id.
 """
-struct Component{T <: ComponentData} <: AbstractComponent{T}
+mutable struct Component{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
     data   ::Vector{T}
 end
@@ -158,7 +159,7 @@ end
 #            Iteration                 #
 #                                      #
 ########################################
-struct EntityIterator{T <: Union{IndicesIterator,Indices,AbstractGroup}, TT <: Tuple}
+struct EntityIterator{T <: Union{AbstractIndicesIterator,Indices,AbstractGroup}, TT <: Tuple}
     it::T
     components::TT
 end
@@ -168,6 +169,18 @@ Base.IteratorSize(::EntityIterator) = Base.SizeUnknown()
 Base.IteratorEltype(::EntityIterator) = Base.HasEltype()
 Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{TT}
 Base.length(i::EntityIterator) = length(i.it)
+
+function Base.filter(f, it::EntityIterator)
+    j = 1
+    out = Vector{eltype(it)}(undef, length(it))
+    for e in it
+        @inbounds out[j] = e
+        j = f(e) ? j+1 : j
+    end
+    resize!(out, j-1)
+    sizehint!(out, length(out))
+    return out 
+end
 
 Base.in(e::AbstractEntity, i::EntityIterator) = in(e.id, i.it)
 
@@ -288,9 +301,12 @@ end
 end
     
 @inline Base.@propagate_inbounds Base.length(::EntityState{TT}) where {TT} = length(TT.parameters)
-    
+@inline function Base.iterate(i::EntityState, state = 1)
+    state > length(i) && return nothing
+    return @inbounds i.components[state][i.e], state + 1
+end
  
-@inline function Base.iterate(i::EntityIterator, state = 1)
+@inline function Base.iterate(i::EntityIterator, state = i.it isa ReverseIndicesIterator ? length(i.it.shortest) : 1)
     n = iterate(i.it, state)
     n === nothing && return n
     e = Entity(n[1])
@@ -299,90 +315,92 @@ end
 
 Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
 
-macro entities_in(indices_expr)
-    expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
-    if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-        return esc(:(Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])), ($(t_sets[1]),))))
-    else
-        return esc(quote
-            t_comps = $(Expr(:tuple, t_sets...))
-            t_or_comps = $(Expr(:tuple, t_orsets...))
-            sets = map(Overseer.indices_iterator, t_comps)
-            orsets = map(Overseer.indices_iterator, t_or_comps)
-            if isempty(sets)
-                minlen, minid = findmin(map(length, orsets))
-                t_shortest = orsets[minid]
-            else
-                minlen, minid = findmin(map(length, sets))
-                t_shortest = sets[minid]
-            end
-            if $(!isempty(t_orsets))
-                shortest = deepcopy(t_shortest)
-                for s in orsets
-                    union!(shortest, s)
-                end
-            else
-                shortest = t_shortest
-            end
-            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr), (t_comps..., t_or_comps...,))
-        end)
-    end
-end
-
-macro entities_in(ledger, indices_expr)
-    expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
-    t_comp_defs = quote
-    end
-    comp_sym_map = Dict()
-    for s in [t_sets; t_notsets; t_orsets]
-        sym = gensym()
-        t_comp_defs = quote
-            $t_comp_defs
-            $sym = $ledger[$s]
-        end
-        comp_sym_map[s] = sym
-    end
-    t_comp_defs = MacroTools.rmlines(MacroTools.flatten(t_comp_defs))
-    
-    expr = MacroTools.postwalk(expr) do x
-        if x in keys(comp_sym_map)
-            return comp_sym_map[x]
+for (m, it_short, it) in zip((:entities_in, :safe_entities_in), (:indices_iterator, :reverse_indices_iterator), (:IndicesIterator, :ReverseIndicesIterator))
+    @eval macro $m(indices_expr)
+        expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
+        if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
+            return esc(:(Overseer.EntityIterator($$it_short($(t_sets[1])), ($(t_sets[1]),))))
         else
-            return x
+            return esc(quote
+                t_comps = $(Expr(:tuple, t_sets...))
+                t_or_comps = $(Expr(:tuple, t_orsets...))
+                sets = map(Overseer.indices_iterator, t_comps)
+                orsets = map(Overseer.indices_iterator, t_or_comps)
+                if isempty(sets)
+                    minlen, minid = findmin(map(length, orsets))
+                    t_shortest = orsets[minid]
+                else
+                    minlen, minid = findmin(map(length, sets))
+                    t_shortest = sets[minid]
+                end
+                if $(!isempty(t_orsets))
+                    shortest = deepcopy(t_shortest)
+                    for s in orsets
+                        union!(shortest, s)
+                    end
+                else
+                    shortest = t_shortest
+                end
+                Overseer.EntityIterator($$it(shortest, x->$expr), (t_comps..., t_or_comps...,))
+            end)
         end
     end
-    t_sets = map(x -> comp_sym_map[x], t_sets)
-    t_orsets = map(x -> comp_sym_map[x], t_orsets)
-    
-    if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-        return esc(quote
-            $t_comp_defs
-            Overseer.EntityIterator(Overseer.indices_iterator($(t_sets[1])), ($(t_sets[1]),))
-        end)
-    else
-        return esc(quote
-            $t_comp_defs
-            t_comps = $(Expr(:tuple, t_sets...))
-            t_or_comps = $(Expr(:tuple, t_orsets...))
-            sets = map(Overseer.indices_iterator, t_comps)
-            orsets = map(Overseer.indices_iterator, t_or_comps)
-            if isempty(sets)
-                minlen, minid = findmin(map(length, orsets))
-                t_shortest = orsets[minid]
-            else
-                minlen, minid = findmin(map(length, sets))
-                t_shortest = sets[minid]
+
+    @eval macro $m(ledger, indices_expr)
+        expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
+        t_comp_defs = quote
+        end
+        comp_sym_map = Dict()
+        for s in [t_sets; t_notsets; t_orsets]
+            sym = gensym()
+            t_comp_defs = quote
+                $t_comp_defs
+                $sym = $ledger[$s]
             end
-            if $(!isempty(t_orsets))
-                shortest = deepcopy(t_shortest)
-                for s in orsets
-                    union!(shortest, s)
+            comp_sym_map[s] = sym
+        end
+        t_comp_defs = MacroTools.rmlines(MacroTools.flatten(t_comp_defs))
+        
+        expr = MacroTools.postwalk(expr) do x
+            if x in keys(comp_sym_map)
+                return comp_sym_map[x]
+            else
+                return x
+            end
+        end
+        t_sets = map(x -> comp_sym_map[x], t_sets)
+        t_orsets = map(x -> comp_sym_map[x], t_orsets)
+        
+        if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
+            return esc(quote
+                $t_comp_defs
+                Overseer.EntityIterator($$it_short($(t_sets[1])), ($(t_sets[1]),))
+            end)
+        else
+            return esc(quote
+                $t_comp_defs
+                t_comps = $(Expr(:tuple, t_sets...))
+                t_or_comps = $(Expr(:tuple, t_orsets...))
+                sets = map(Overseer.indices_iterator, t_comps)
+                orsets = map(Overseer.indices_iterator, t_or_comps)
+                if isempty(sets)
+                    minlen, minid = findmin(map(length, orsets))
+                    t_shortest = orsets[minid]
+                else
+                    minlen, minid = findmin(map(length, sets))
+                    t_shortest = sets[minid]
                 end
-            else
-                shortest = t_shortest
-            end
-            Overseer.EntityIterator(Overseer.IndicesIterator(shortest, x->$expr), (t_comps..., t_or_comps...,))
-        end)
+                if $(!isempty(t_orsets))
+                    shortest = deepcopy(t_shortest)
+                    for s in orsets
+                        union!(shortest, s)
+                    end
+                else
+                    shortest = t_shortest
+                end
+                Overseer.EntityIterator($$it(shortest, x->$expr), (t_comps..., t_or_comps...,))
+            end)
+        end
     end
 end    
     
@@ -448,7 +466,7 @@ end
 
 Base.parent(e::Entity) = ApplyToPool(e)
 
-struct PooledComponent{T <: ComponentData} <: AbstractComponent{T}
+mutable struct PooledComponent{T <: ComponentData} <: AbstractComponent{T}
     indices::Indices
     pool::Vector{Int}
     pool_size::Vector{Int}
@@ -676,40 +694,51 @@ function make_unique!(c::PooledComponent)
     return
 end
 
-struct PooledEntityIterator{T}
+struct EntityPoolIterator{T}
     c::PooledComponent{T}
     pool_id::Int
 end
 
-indices_iterator(g::PooledEntityIterator) = g
-indices(g::PooledEntityIterator) = g
+indices_iterator(g::EntityPoolIterator) = g
+indices(g::EntityPoolIterator) = g
 
 function entity_pool(c::PooledComponent, pool_id::Int)
     @boundscheck if length(c.data) < pool_id
         throw(BoundsError(c, pool_id))
     end
-    return PooledEntityIterator(c, pool_id)
+    return EntityPoolIterator(c, pool_id)
 end
 
-@inline entity_index(it::PooledEntityIterator, i::Int) = @inbounds it.c.indices.packed[findnext(isequal(it.pool_id), it.c.pool, i)]
+@inline entity_index(it::EntityPoolIterator, i::Int) = @inbounds it.c.indices.packed[findnext(isequal(it.pool_id), it.c.pool, i)]
     
-@inline function Base.iterate(i::PooledEntityIterator, state = (1, 1))
+@inline function Base.iterate(i::EntityPoolIterator, state = (1, 1))
     state[2] > i.c.pool_size[i.pool_id] && return nothing
     n = findnext(isequal(i.pool_id), i.c.pool, state[1])
     n === nothing && return n
-    return Entity(i.c.indices.packed[n]), (n + 1, state[2] + 1)
+    return EntityState(Entity(i.c.indices.packed[n]), (i.c,)), (n + 1, state[2] + 1)
 end
 
-Base.getindex(iterator::PooledEntityIterator, i) = iterate(iterator, i)[1]
+Base.getindex(iterator::EntityPoolIterator, i) = iterate(iterator, i)[1]
     
-Base.IteratorSize(::Type{PooledEntityIterator}) = Base.HasLength()
-Base.IteratorEltype(::Type{PooledEntityIterator}) = Base.HasEltype()
-Base.eltype(::PooledEntityIterator) = Entity
-Base.eltype(::Type{PooledEntityIterator{T}}) where {T} = T
-Base.length(i::PooledEntityIterator) = i.c.pool_size[i.pool_id]
+Base.IteratorSize(::Type{EntityPoolIterator}) = Base.HasLength()
+Base.IteratorEltype(::Type{EntityPoolIterator}) = Base.HasEltype()
+Base.eltype(::EntityPoolIterator{T}) where {T} = EntityState{Tuple{PooledComponent{T}}}
+Base.eltype(::Type{EntityPoolIterator{T}}) where {T} = T
+Base.length(i::EntityPoolIterator) = i.c.pool_size[i.pool_id]
 
+function Base.filter(f, it::EntityPoolIterator)
+    j = 1
+    out = Vector{eltype(it)}(undef, length(it))
+    for e in it
+        @inbounds out[j] = e
+        j = f(e) ? j+1 : j
+    end
+    resize!(out, j-1)
+    sizehint!(out, length(out))
+    return out 
+end
 
-Base.@propagate_inbounds @inline Base.in(e::Entity, it::PooledEntityIterator) =
+Base.@propagate_inbounds @inline Base.in(e::Entity, it::EntityPoolIterator) =
     in(e, it.c) && @inbounds pool(it.c, e) == it.pool_id
-Base.@propagate_inbounds @inline Base.in(e::Int, it::PooledEntityIterator) =
+Base.@propagate_inbounds @inline Base.in(e::Int, it::EntityPoolIterator) =
     in(e, it.c.indices) && @inbounds pool(it.c, e) == it.pool_id

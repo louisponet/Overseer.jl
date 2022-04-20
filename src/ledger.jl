@@ -95,7 +95,7 @@ function Base.getindex(m::AbstractLedger, e::AbstractEntity)
 			push!(data, c)
 		end
 	end
-	return EntityState(e, (data...,))
+	return EntityState(convert(Entity, e), (data...,))
 end
 
 function Base.getindex(v::Vector{Stage}, s::Symbol)

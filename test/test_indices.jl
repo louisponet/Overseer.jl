@@ -1,4 +1,4 @@
-using Overseer: Indices, @indices_in
+using Overseer: Indices, @indices_in, @reverse_indices_in
 
 @testset "Construction, collect" begin
     data_in = (1,5,100)
@@ -178,6 +178,14 @@ end
     end
     @test t == 4+6+8+1
     @test length(it) == 4
+    t = 0
+    it = @reverse_indices_in(((a && c[1]) || d) && !b)
+    for e in it 
+        t+=e
+    end
+    @test t == 4+6+8+1
+    @test length(it) == 4
+    @test collect(it) == [1, 8, 6, 4]
 end
 
 
