@@ -482,6 +482,8 @@ Base.@propagate_inbounds @inline pool(c::PooledComponent, e::Int) = c.pool[c.ind
 
 npools(c::PooledComponent) = length(c.data)
 
+Entity(c::PooledComponent, i::Int) = parent(c, i)
+
 Base.@propagate_inbounds @inline function Base.parent(c::PooledComponent, i::Int)
     @boundscheck if i > length(c.data)
         throw(BoundsError(c, i))

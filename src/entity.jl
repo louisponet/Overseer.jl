@@ -3,23 +3,23 @@ struct Entity <: AbstractEntity
 end
 
 function Entity(m::AbstractLedger)
-	if !isempty(free_entities(m))
-		e = pop!(free_entities(m))
-		entities(m)[e.id] = e
-		return e
-	end
-	n = length(entities(m)) + 1
-	e = Entity(n)
-	push!(entities(m), e)
-	return e
+    if !isempty(free_entities(m))
+        e = pop!(free_entities(m))
+        entities(m)[e.id] = e
+        return e
+    end
+    n = length(entities(m)) + 1
+    e = Entity(n)
+    push!(entities(m), e)
+    return e
 end
 
 function Entity(m::AbstractLedger, datas::ComponentData...)
-	e = Entity(m)
-	for d in datas
-		m[e] = d
-	end
-	return e
+    e = Entity(m)
+    for d in datas
+        m[e] = d
+    end
+    return e
 end
 
 function Entity(c::AbstractComponent, i::Integer)
@@ -27,16 +27,16 @@ function Entity(c::AbstractComponent, i::Integer)
 end
 
 function Entity(m::AbstractLedger, parent::Entity, datas::ComponentData...)
-	e = Entity(m)
-	for d in datas
-		m[e] = d
-	end
-	for (T, component) in components(m)
-		if component isa PooledComponent && in(parent, component) && !in(e, component)
-			component[e] = parent
-		end
-	end
-	return e
+    e = Entity(m)
+    for d in datas
+        m[e] = d
+    end
+    for (T, component) in components(m)
+        if component isa PooledComponent && in(parent, component) && !in(e, component)
+            component[e] = parent
+        end
+    end
+    return e
 end
 
 Base.iterate(e::Entity, state=1) = state > 1 ? nothing : (e, state+1)
