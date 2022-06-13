@@ -103,7 +103,7 @@ function Base.getindex(v::Vector{Stage}, s::Symbol)
     if id === nothing
         error("Stage $s not found.")
     end
-    return v[id]
+    return last(v[id])
 end
 
 function Base.setindex!(m::AbstractLedger, v::T, e::AbstractEntity) where {T<:ComponentData}

@@ -366,6 +366,8 @@ function expand_indices_bool(expr)
         expr_, sets_, notsets_, orsets_ = expand_indices_bool(expr.args[2])
         if expr.args[1] != :!
             append!(sets, sets_)
+        else
+            append!(notsets, sets_)
         end
         append!(orsets, orsets_)
         append!(notsets, notsets_)
