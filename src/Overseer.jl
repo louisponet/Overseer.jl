@@ -27,7 +27,7 @@ module Overseer
 
     export AbstractLedger, Ledger, System, Stage, Component, PooledComponent, ComponentData, Entity
     export @component, @pooled_component
-    export @safe_entities_in, @entities_in, entity_pool
+    export @safe_entities_in, @entities_in, entity_pool, pools, pool
 
     export update, schedule_delete!, delete_scheduled!, empty_entities!, stage, components, entities, stages
     export prepare, singleton, valid_entities, groups, group, create_group!, regroup!, remove_group!

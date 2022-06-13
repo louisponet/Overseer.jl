@@ -711,21 +711,22 @@ function entity_pool(c::PooledComponent, pool_id::Int)
     return EntityPoolIterator(c, pool_id)
 end
 
-@inline entity_index(it::EntityPoolIterator, i::Int) = @inbounds it.c.indices.packed[findnext(isequal(it.pool_id), it.c.pool, i)]
+@inline entity_index(it::EntityPoolIterator, i::Int) =
+    @inbounds it.c.indices.packed[findnext(isequal(it.pool_id), it.c.pool, i)]
     
 @inline function Base.iterate(i::EntityPoolIterator, state = (1, 1))
     state[2] > i.c.pool_size[i.pool_id] && return nothing
     n = findnext(isequal(i.pool_id), i.c.pool, state[1])
     n === nothing && return n
-    return EntityState(Entity(i.c.indices.packed[n]), (i.c,)), (n + 1, state[2] + 1)
+    return Entity(i.c.indices.packed[n]), (n + 1, state[2] + 1)
 end
 
-Base.getindex(iterator::EntityPoolIterator, i) = iterate(iterator, i)[1]
+Base.getindex(iterator::EntityPoolIterator, i) = iterate(iterator, (i, 1))[1]
     
 Base.IteratorSize(::Type{EntityPoolIterator}) = Base.HasLength()
 Base.IteratorEltype(::Type{EntityPoolIterator}) = Base.HasEltype()
-Base.eltype(::EntityPoolIterator{T}) where {T} = EntityState{Tuple{PooledComponent{T}}}
-Base.eltype(::Type{EntityPoolIterator{T}}) where {T} = T
+Base.eltype(::EntityPoolIterator) = Entity
+Base.eltype(::Type{EntityPoolIterator}) = Entity
 Base.length(i::EntityPoolIterator) = i.c.pool_size[i.pool_id]
 
 function Base.filter(f, it::EntityPoolIterator)
@@ -744,3 +745,17 @@ Base.@propagate_inbounds @inline Base.in(e::Entity, it::EntityPoolIterator) =
     in(e, it.c) && @inbounds pool(it.c, e) == it.pool_id
 Base.@propagate_inbounds @inline Base.in(e::Int, it::EntityPoolIterator) =
     in(e, it.c.indices) && @inbounds pool(it.c, e) == it.pool_id
+
+struct PoolsIterator{T}
+    c::PooledComponent{T}
+end
+
+pools(c::PooledComponent) = PoolsIterator(c)
+
+
+function Base.iterate(i::PoolsIterator, p = 1)
+    p > length(i.c.data) && return nothing
+    return (@inbounds i.c.data[p], EntityPoolIterator(i.c, p)), p+1
+end
+
+Base.length(i::PoolsIterator) = length(i.c)
