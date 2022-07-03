@@ -184,8 +184,14 @@ end
         t+=e
     end
     @test t == 4+6+8+1
-    @test length(it) == 4
-    @test collect(it) == [1, 8, 6, 4]
+    t = 0
+    it = @indices_in(a || d)
+    for e in it 
+        t+=e
+    end
+    @test t == 1+2+4+6+8+10
+    @test length(it) == 6
+    @test collect(it) == [1, 2, 4, 6, 8, 10]
 end
 
 

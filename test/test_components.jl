@@ -19,7 +19,7 @@ end
 
 for CT in (Component, PooledComponent)
     @testset "Interface: $CT" begin
-        @testset "AbstractComponent interface" Overseer.test_abstractcomponent_interface(CT)
+        @testset "AbstractComponent interface" begin Overseer.test_abstractcomponent_interface(CT) end
         
         entities1 = [[Entity(i) for i in 2:2:10]; [Entity(i) for i in 134:274:7592]]
 
@@ -137,6 +137,16 @@ for (CT1, CT2) in ((Component, PooledComponent, Component, PooledComponent), (Co
             @test t == 4+6+8+1
             # @test
             @test map(x->x.id, collect(@safe_entities_in(((c1 && c3) || c4) && !c2))) == [1, 8, 6, 4]
+            t = 0
+            for e in @entities_in(c1 || c3)
+                if e in c1
+                    t += e.id
+                end
+                if e in c3
+                    t += e.p1
+                end
+            end
+            @test t == 38
 
             t = 0
             for e in @entities_in((c1 || c3) && !c2)
@@ -321,25 +331,17 @@ end
     end
     @test order == [Entity(1), Entity(3), Entity(2)]
 
+    
+    @test filter(x-> x.id <= 1, entity_pool(c5, 1)) == [Entity(1)]
+
+    @test length(pools(c5)) == length(c5)
+    @test iterate(pools(c5))[1][1] == Test5(1) 
     @test parent(c5, 2) == Entity(2)
     @test parent(c5, 1) == Entity(1)
     @test parent(c5, Entity(3)) == Entity(1)
 
     empty!(c5)
-    # entities1 = [Entity(i) for i = 2:2:10]
-    # vals = [Test5(2), Test5(2), Test5(8), Test5(3), Test5(8)]
-    # for (e, v) in zip(entities1, vals)
-    #     c5[e] = v
-    # end
-
-    
-    # @testset "permutation" begin
-    #     permvec = div.([6, 4, 8, 10, 2], 2)
-    #     permute!(c5, permvec)
-    #     @test c5.indices.packed == [6, 4, 8, 10, 2]
-    #     @test map(x->x, c5.indices.packed) == [6, 4, 8, 10, 2]
-    #     @test map(x->x, c5.pool) == permute!([1, 1, 2, 3, 2], permvec)
-    # end
+    @test isempty(c5)
 end
 
 @component struct Comp
