@@ -72,6 +72,7 @@ end
 end
 
 Base.length(s::Indices) = length(s.packed)
+Base.size(s::Indices)   = (length(s.packed),)
 
 Base.@propagate_inbounds @inline function Base.getindex(s::Indices, p::Page)
     id, offset = p
@@ -239,155 +240,29 @@ end
 
 Base.collect(s::Indices) = copy(s.packed)
 
-function Base.permute!(s::Indices, p)
+function Base.permute!(s::Indices, p::AbstractVector)
     permute!(s.packed, p)
-    @inbounds for (i, eid) in s.packed
+    @inbounds for (i, eid) in enumerate(s.packed)
         p[i] == i && continue #nothing was changed
         pageid, offset = pageid_offset(eid)
-        s.reverse[page][offset] = i
+        s.reverse[pageid][offset] = i
     end
 end
 
-abstract type AbstractIndicesIterator end
-
-struct IndicesIterator{I, T<:Function} <: AbstractIndicesIterator
-    shortest::I
-    test::T
-end
-
-Base.IteratorSize(::AbstractIndicesIterator) = Base.SizeUnknown()
-Base.IteratorEltype(::AbstractIndicesIterator) = Base.HasEltype()
-Base.in(i::Int, it::AbstractIndicesIterator) = it.test(i)
-
-@inline indices(i::Indices) = i
-
-@inline function Base.length(it::AbstractIndicesIterator)
-    it_length = 0
-    for i = 1:length(it.shortest)
-        @inbounds if it.test(entity_index(it.shortest, i))
-            it_length += 1
+Base.@propagate_inbounds function swap_order!(ids::Indices, fid::Int, tid::Int)
+    for id in (fid, tid)
+        @boundscheck if !(id in ids)
+            throw(BoundsError(ids, id))
         end
     end
-    return it_length
-end
-
-Base.@propagate_inbounds @inline entity_index(c::Union{<:AbstractComponent, Indices}, i::Int) = indices(c).packed[i]
-
-@inline function Base.iterate(it::IndicesIterator, state=1)
-    it_length = length(it.shortest)
-    for i=state:it_length
-        @inbounds id = entity_index(it.shortest, i)
-        if it.test(id)
-            return id, i+1
-        end
+    @inbounds begin
+        fp = pageid_offset(fid)
+        tp = pageid_offset(tid)
+        pid1 = ids[fp]
+        pid2 = ids[tp]
+        ids.reverse[fp.id][fp.offset] = pid2
+        ids.reverse[tp.id][tp.offset] = pid1
+        ids.packed[pid1], ids.packed[pid2] = ids.packed[pid2], ids.packed[pid1]
+        return pid1, pid2
     end
-end
-
-struct ReverseIndicesIterator{I, T<:Function} <: AbstractIndicesIterator
-    shortest::I
-    test::T
-end
-
-@inline function Base.iterate(it::ReverseIndicesIterator, state=length(it.shortest))
-    # it_length = length(it.shortest)
-    for i=state:-1:1
-        @inbounds id = entity_index(it.shortest, i)
-        if it.test(id)
-            return id, i - 1
-        end
-    end
-end
-
-for (m, it) in zip((:indices_in, :reverse_indices_in), (:IndicesIterator, :ReverseIndicesIterator))
-    @eval macro $m(indices_expr)
-        expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
-        return esc(quote
-            sets = $(Expr(:tuple, t_sets...))
-            orsets = $(Expr(:tuple, t_orsets...))
-
-            if isempty(sets)
-                minlen, minid = findmin(map(length, orsets))
-                t_shortest = orsets[minid]
-            else
-                minlen, minid = findmin(map(length, sets))
-                t_shortest = sets[minid]
-            end
-            if $(!isempty(t_orsets))
-                shortest = deepcopy(t_shortest)
-                for s in orsets
-                    union!(shortest, s)
-                end
-            else
-                shortest = t_shortest
-            end
-            $$it(shortest, x -> $expr)
-        end)
-    end
-end
-
-function expand_indices_bool(expr)
-    if expr isa Symbol || expr.head in (:., :ref, :curly)  || (expr.head == :call && expr.args[1] != :!)
-        return Expr(:call, :in, :x, expr), [expr], Symbol[], Symbol[]
-    end
-    # if !in(expr.head, (:||, :&&)) && !(expr.head == :call && expr.args[1] in == :!)
-    #     error("Can only expand expressions with ||, && and !")
-    # end
-    sets = Union{Symbol, Expr}[]
-    notsets = Union{Symbol, Expr}[]
-    orsets = Union{Symbol, Expr}[]
-    if expr.args[1] == :!
-        nothing
-    elseif isa(expr.args[1], Symbol)
-        if expr.head != :|| 
-            push!(sets, expr.args[1])
-        else
-            push!(orsets, expr.args[1])
-        end
-        expr.args[1] = Expr(:call, :in, :x, expr.args[1])
-    else
-        expr_, sets_, notsets_, orsets_ = expand_indices_bool(expr.args[1])
-        append!(sets,  sets_)
-        append!(orsets,  orsets_)
-        append!(notsets,  notsets_)
-        expr.args[1] = expr_
-    end
-    if isa(expr.args[2], Symbol)
-        if expr.args[1] != :!
-            if expr.head != :|| 
-                push!(sets, expr.args[2])
-            else
-                push!(orsets, expr.args[2])
-            end
-        else
-            push!(notsets, expr.args[2])
-        end
-        expr.args[2] = Expr(:call, :in, :x, expr.args[2])
-    else
-        expr_, sets_, notsets_, orsets_ = expand_indices_bool(expr.args[2])
-        if expr.args[1] != :!
-            append!(sets, sets_)
-        else
-            append!(notsets, sets_)
-        end
-        append!(orsets, orsets_)
-        append!(notsets, notsets_)
-        expr.args[2] = expr_
-    end
-    return expr, sets, notsets, orsets
-end
-
-Base.@propagate_inbounds function swap_order!(ids::Indices, from_page::Page, to_page::Page, packed_id1::Int, packed_id2::Int)
-    ids.reverse[from_page.id][from_page.offset] = packed_id2
-    ids.reverse[to_page.id][to_page.offset]     = packed_id1
-    ids.packed[packed_id1], ids.packed[packed_id2] =
-        ids.packed[packed_id2], ids.packed[packed_id1]
-end
-
-Base.@propagate_inbounds function swap_order!(ids::Indices, reverse_id1::Int, reverse_id2::Int)
-    from_page = pageid_offset(reverse_id1)
-    to_page = pageid_offset(reverse_id2)
-    packed_id1 = ids[from_page]
-    packed_id2 = ids[to_page]
-    swap_order!(ids, from_page, to_page, packed_id1, packed_id2)
-    return packed_id1, packed_id2
 end

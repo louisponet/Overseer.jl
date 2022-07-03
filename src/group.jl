@@ -1,3 +1,26 @@
+function ensure_entity_id!(c::AbstractComponent, e::Int, id::Int)
+    indices = c.indices
+    @inbounds packed_id = indices[e]
+    if packed_id != id
+        @inbounds id_to_swap = indices.packed[id]
+        swap_order!(indices, e, id_to_swap)
+        c.data[id], c.data[packed_id] = c.data[packed_id], c.data[id]
+    end
+    return true
+end
+
+function shared_entity_ids(cs)
+    l, id = findmin(map(length, cs))
+    shortest = cs[id]
+    shared_entity_ids = Int[]
+    for (i, e) in enumerate(shortest.indices)
+        if all(x->in(e, x.indices), cs)
+            push!(shared_entity_ids, e)
+        end
+    end
+    return shared_entity_ids
+end
+
 "Forms groups of components." 
 
 @inline indices(g::AbstractGroup) = g.indices

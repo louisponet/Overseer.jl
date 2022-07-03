@@ -1,3 +1,9 @@
+########################################
+#                                      #
+#            Entity                    #
+#                                      #
+########################################
+
 struct Entity <: AbstractEntity
     id::Int
 end
@@ -22,7 +28,7 @@ function Entity(m::AbstractLedger, datas::ComponentData...)
     return e
 end
 
-function Entity(c::AbstractComponent, i::Integer)
+function entity(c::AbstractComponent, i::Integer)
     return Entity(c.indices.packed[i])
 end
 
@@ -43,4 +49,133 @@ Base.iterate(e::Entity, state=1) = state > 1 ? nothing : (e, state+1)
 
 const EMPTY_ENTITY = Entity(0)
 
-Base.:(==)(e1::AbstractEntity, e2::AbstractEntity) = e1.id == e2.id 
+Base.:(==)(e1::AbstractEntity, e2::AbstractEntity) = e1.id == e2.id
+
+########################################
+#                                      #
+#            EntityState               #
+#                                      #
+########################################
+
+struct EntityState{TT<:Tuple} <: AbstractEntity
+    e::Entity
+    components::TT
+end
+
+Entity(e::EntityState) = e.e
+Base.convert(::Type{Entity}, e::EntityState) = Entity(e)
+function Base.show(io::IO, e::EntityState)
+    println(io, "$(typeof(e)):")
+    println(io, "$(e.e)")
+    println(io, "Components:")
+    for c in e.components
+        if c isa AbstractComponent
+            println(io, "$(c[e])")
+        else
+            println(io, "$c")
+        end
+    end
+end
+
+# TODO: Cleanup, can these two be merged?
+@generated function Base.getproperty(e::EntityState{TT}, f::Symbol) where {TT}
+    fn_to_DT = Dict{Symbol, DataType}()
+    ex = :(getfield(e, f))
+    ex = Expr(:elseif, :(f === :id), :(return getfield(getfield(e, :e), :id)::Int), ex)
+    for PDT in TT.parameters
+        DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
+        
+        for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
+            if haskey(fn_to_DT, fn)
+                fnq = QuoteNode(fn)
+                DT_ = fn_to_DT[fn]
+                ft_ = fieldtype(DT_, fn)
+                ex = MacroTools.postwalk(ex) do x
+                    if @capture(x, return getfield(e[$DT_], $fnq)::$ft_)
+                        return quote
+                            throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
+                        end
+                    else
+                        return x
+                    end
+                end
+            else
+                fn_to_DT[fn] = DT
+                fnq = QuoteNode(fn)
+                ex = Expr(:elseif, :(f === $fnq), :(return getfield(e[$DT], $fnq)::$ft), ex)
+            end
+        end
+    end
+    ex.head = :if
+    return quote
+        $(Expr(:meta, :inline))
+        $(Expr(:meta, :propagate_inbounds))
+        $ex
+    end
+end
+
+@generated function Base.setproperty!(e::EntityState{TT}, f::Symbol, val) where {TT}
+    fn_to_DT = Dict{Symbol, DataType}()
+    ex = :(setfield!(e, f))
+    ex = Expr(:elseif, :(f === :id), :(return setfield!(getfield(e, :e), :id)::Int, val), ex)
+    for PDT in TT.parameters
+        DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
+        for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
+            if haskey(fn_to_DT, fn)
+                fnq = QuoteNode(fn)
+                DT_ = fn_to_DT[fn]
+                ft_ = fieldtype(DT_, fn)
+                ex = MacroTools.postwalk(ex) do x
+                    if @capture(x, setfield!(e[$DT_], $fnq, val))
+                        return quote
+                            throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
+                        end
+                    else
+                        return x
+                    end
+                end
+            else
+                fn_to_DT[fn] = DT
+                fnq = QuoteNode(fn)
+                ex = Expr(:elseif, :(f === $fnq), :(return setfield!(e[$DT], $fnq, val)), ex)
+            end
+        end
+    end
+    ex.head = :if
+    return quote
+        $(Expr(:meta, :inline))
+        $(Expr(:meta, :propagate_inbounds))
+        $ex
+    end
+end
+
+@generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
+    id = findfirst(x -> x <: AbstractComponent ? eltype(x) == T : x == T, TT.parameters)
+    return quote
+        $(Expr(:meta, :inline))
+        @inbounds getfield(e,:components)[$id]
+    end
+end
+
+
+@inline function Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData}
+    t = component(e, T)
+    if t isa AbstractComponent
+        return @inbounds t[e.e]
+    else
+        return t
+    end
+end
+    
+@inline function Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData}
+    t = component(e, T)
+    @assert t isa AbstractComponent "Cannot set a Component in a non referenced EntityState."
+    return @inbounds t[e] = x
+end
+    
+@inline Base.length(::EntityState{TT}) where {TT} = length(TT.parameters)
+@inline function Base.iterate(i::EntityState, state = 1)
+    state > length(i) && return nothing
+    return @inbounds i.components[state][i.e], state + 1
+end
+ 

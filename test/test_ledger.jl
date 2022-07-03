@@ -129,10 +129,7 @@ struct TSys3 <: System end
 Overseer.requested_components(::TSys3) = (T1, T2, T3, T4)
 
 function Overseer.update(::TSys3, m::AbstractLedger)
-    t1 = m[T1]
-    t2 = m[T2]
-    t3 = m[T3]
-    for e in @entities_in(t1 || t2 || t3 )
+    for e in @entities_in(m, T1 || T2 || T3 )
         schedule_delete!(m, e)
     end
 end

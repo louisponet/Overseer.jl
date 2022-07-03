@@ -1,3 +1,48 @@
+using Test
+
+struct TestCompData <: ComponentData
+    t::Int
+end
+
+# AbstractComponent Interface
+function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent}
+    c = T{TestCompData}()
+
+    @test eltype(c) <: TestCompData
+    @test c.indices isa Indices
+    
+    @test isempty(c)
+    @test length(c) == 0
+    c[Entity(1)] = TestCompData(1)
+    c[Entity(2)] = TestCompData(1)
+    @test Entity(2) in c
+    @test length(c) == 2 == size(c)[1] == length(c.indices) == length(entity_data(c))
+
+    
+    @test c[Entity(2)] isa TestCompData
+
+    @test entity(c, 1) isa Entity
+    @test pop!(c, Entity(2)) isa TestCompData
+    @test pop!(c) isa TestCompData
+    @test isempty(c)
+    
+    c[Entity(1)] = TestCompData(1)
+    c[Entity(2)] = TestCompData(2)
+
+    # Needed for order swapping
+    entity_data(c)[1], entity_data(c)[2] = entity_data(c)[2], entity_data(c)[1]
+    @test c[Entity(2)] == TestCompData(1)
+    @test c[Entity(1)] == TestCompData(2)
+    
+    c[Entity(1)], c[Entity(2)] = c[Entity(2)], c[Entity(1)]
+    @test c[Entity(1)] == TestCompData(1)
+    @test c[Entity(2)] == TestCompData(2)
+    
+    @test iterate(c)[1] isa TestCompData
+    empty!(c)
+    @test isempty(c)
+end
+
 Base.isequal(F::C, G::C) where {C <: ComponentData} =
     all(f -> isequal(getfield(F, f), getfield(G, f)), 1:nfields(F))::Bool
     
@@ -12,10 +57,64 @@ Base.:(==)(F::C, G::C) where {C <: ComponentData} =
 end
 
 "Can be used to specify the type of component storage to be used for a given `ComponentData`."
-component_type(::Type{<:ComponentData}) = Component
+component_type(::Type{TC}) where{TC<:ComponentData} = Component{TC}
  
 @inline indices_iterator(a::AbstractComponent) = a.indices
 @inline reverse_indices_iterator(a::AbstractComponent) = ReverseIndicesIterator(a.indices, i -> true)
+
+Base.in(i::Integer,        c::AbstractComponent)  = in(i, c.indices)
+Base.in(e::AbstractEntity, c::AbstractComponent)  = in(e.id, c)
+
+Base.length(c::AbstractComponent)  = length(c.indices)
+Base.size(c::AbstractComponent)    = size(c.indices)
+Base.isempty(c::AbstractComponent) = isempty(c.indices)
+
+Base.eltype(::Type{<:AbstractComponent{T}}) where T = T
+
+function Base.delete!(c::AbstractComponent, es::Vector{Entity})
+    for e in es
+        if e in c
+            pop!(c, e)
+        end
+    end
+end
+
+Base.@propagate_inbounds function Base.getindex(c::AbstractComponent, I::AbstractVector{<:AbstractEntity})
+    return map(x -> c[x], I)
+end
+
+function swap_order!(c::AbstractComponent, e1::AbstractEntity, e2::AbstractEntity)
+    @boundscheck if !in(e1, c)
+        throw(BoundsError(c, e1))
+    elseif !in(e2, c)
+        throw(BoundsError(c, e2))
+    end
+    @inbounds begin
+        id1, id2 = swap_order!(c.indices, e1.id, e2.id)
+        edata = entity_data(c)
+        edata[id1], edata[id2] = edata[id2], edata[id1]
+    end
+end
+
+function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:Integer})
+    permute!(entity_data(c), permvec)
+    return c
+end
+
+Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:AbstractEntity}) = permute!(c, map(x->c.indices[x.id], permvec))
+
+function Base.:(==)(c1::C1, c2::C2) where {C1 <: AbstractComponent, C2 <: AbstractComponent}
+    if eltype(C1) != eltype(C2) ||length(c1) != length(c2)
+        return false
+    elseif length(c1) > 20 && hash(c1) != hash(c2)
+        return false
+    else
+        return all(i -> (e = entity(c1, i); (e in c2) && (@inbounds c2[e] == c1[e])), eachindex(c1))
+    end
+end
+
+Base.IndexStyle(::Type{AbstractComponent}) = IndexLinear()
+
 
 """
 The most basic Component type.
@@ -31,31 +130,9 @@ end
 
 Component{T}() where {T} = Component(Indices(), T[])
 
+entity_data(c::Component) = c.data
 
 ##### BASE Extensions ####
-Base.eltype(::Type{<:AbstractComponent{T}}) where T = T
-
-Base.length(c::AbstractComponent) = length(c.data)
-Base.size(c::AbstractComponent) = size(c.data)
-
-Base.in(i::Integer, c::AbstractComponent) = in(i, c.indices)
-Base.in(e::AbstractEntity, c::AbstractComponent)  = in(e.id, c)
-
-Base.isempty(c::AbstractComponent) = isempty(c.data)
-
-function Base.delete!(c::AbstractComponent, es::Vector{Entity})
-    for e in es
-        if e in c
-            pop!(c, e)
-        end
-    end
-end
-
-function Base.permute!(c::AbstractComponent, permvec)
-    permute!(c.data, permvec)
-    permute!(c.indices, permvec)
-end
-
 Base.@propagate_inbounds @inline Base.getindex(c::Component, e::AbstractEntity)  = c.data[c.indices[e.id]]
 Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
 
@@ -76,23 +153,10 @@ function Base.empty!(c::Component)
     return c
 end
 
-function swap_order!(c::AbstractComponent, e1::AbstractEntity, e2::AbstractEntity)
-    @boundscheck if !in(e1, c)
-        throw(BoundsError(c, e1))
-    elseif !in(e2, c)
-        throw(BoundsError(c, e2))
-    end
-    @inbounds begin
-        id1, id2 = swap_order!(c.indices, e1.id, e2.id)
-        c.data[id1], c.data[id2] = c.data[id2], c.data[id1]
-    end
-end
-
-function pop_indices_data!(c::AbstractComponent, e::AbstractEntity)
+function Base.pop!(c::Component, e::AbstractEntity)
     @boundscheck if !in(e, c)
         throw(BoundsError(c, e))
     end
-    n = length(c)
     @inbounds begin
         id = c.indices[e.id]
         v = c.data[id]
@@ -103,33 +167,9 @@ function pop_indices_data!(c::AbstractComponent, e::AbstractEntity)
     end
 end
 
-Base.pop!(c::Component, e::AbstractEntity) = pop_indices_data!(c, e)
-Base.pop!(c::Component) = EntityState(Entity(pop!(c.indices)), (pop!(c.data),))
+Base.pop!(c::AbstractComponent) = @inbounds pop!(c, entity(c, length(c)))
 
 @inline Base.iterate(c::Component, args...) = iterate(c.data, args...)
-
-function ensure_entity_id!(c::AbstractComponent, e::Int, id::Int)
-    indices = c.indices
-    @inbounds packed_id = indices[e]
-    if packed_id != id
-        @inbounds id_to_swap = indices.packed[id]
-        swap_order!(indices, e, id_to_swap)
-        c.data[id], c.data[packed_id] = c.data[packed_id], c.data[id]
-    end
-    return true
-end
-
-function shared_entity_ids(cs)
-    l, id = findmin(map(length, cs))
-    shortest = cs[id]
-    shared_entity_ids = Int[]
-    for (i, e) in enumerate(shortest.indices)
-        if all(x->in(e, x.indices), cs)
-            push!(shared_entity_ids, e)
-        end
-    end
-    return shared_entity_ids
-end
 
 @inline function Base.hash(c::C, h::UInt) where {C <: AbstractComponent}
     for f in nfields(c)
@@ -138,284 +178,11 @@ end
     return h
 end
 
-########################################
-#                                      #
-#            Iteration                 #
-#                                      #
-########################################
-struct EntityIterator{T <: Union{AbstractIndicesIterator,Indices,AbstractGroup}, TT <: Tuple}
-    it::T
-    components::TT
-end
-   
-Base.IteratorSize(::EntityIterator) = Base.SizeUnknown()
-Base.IteratorEltype(::EntityIterator) = Base.HasEltype()
-Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{TT}
-Base.length(i::EntityIterator) = length(i.it)
-
-function Base.filter(f, it::EntityIterator)
-    j = 1
-    out = Vector{eltype(it)}(undef, length(it))
-    for e in it
-        @inbounds out[j] = e
-        j = f(e) ? j+1 : j
-    end
-    resize!(out, j-1)
-    sizehint!(out, length(out))
-    return out 
-end
-
-function Base.map(f, it::EntityIterator)
-    j = 1
-    out = Vector{eltype(it)}(undef, length(it))
-    for e in it
-        @inbounds out[j] = f(e)
-        j += 1
-    end
-    resize!(out, j-1)
-    sizehint!(out, length(out))
-    return out 
-end
-
-Base.in(e::AbstractEntity, i::EntityIterator) = in(e.id, i.it)
-
-struct EntityState{TT<:Tuple} <: AbstractEntity
-    e::Entity
-    components::TT
-end
-
-Entity(e::EntityState) = e.e
-Base.convert(::Type{Entity}, e::EntityState) = Entity(e)
-function Base.show(io::IO, e::EntityState)
-    println(io, "$(typeof(e)):")
-    println(io, "$(e.e)")
-    println(io, "Components:")
-    for c in e.components
-        if c isa AbstractComponent
-            println(io, "$(c[e])")
-        else
-            println(io, "$c")
-        end
-    end
-end
-
-# TODO: Cleanup, can these two be merged?
-@generated function Base.getproperty(e::EntityState{TT}, f::Symbol) where {TT}
-    fn_to_DT = Dict{Symbol, DataType}()
-    ex = :(getfield(e, f))
-    ex = Expr(:elseif, :(f === :id), :(return getfield(getfield(e, :e), :id)::Int), ex)
-    for PDT in TT.parameters
-        DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
-        
-        for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
-            if haskey(fn_to_DT, fn)
-                fnq = QuoteNode(fn)
-                DT_ = fn_to_DT[fn]
-                ft_ = fieldtype(DT_, fn)
-                ex = MacroTools.postwalk(ex) do x
-                    if @capture(x, return getfield(e[$DT_], $fnq)::$ft_)
-                        return quote
-                            throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
-                        end
-                    else
-                        return x
-                    end
-                end
-            else
-                fn_to_DT[fn] = DT
-                fnq = QuoteNode(fn)
-                ex = Expr(:elseif, :(f === $fnq), :(return getfield(e[$DT], $fnq)::$ft), ex)
-            end
-        end
-    end
-    ex.head = :if
-    return quote
-        $(Expr(:meta, :inline))
-        $(Expr(:meta, :propagate_inbounds))
-        $ex
-    end
-end
-
-@generated function Base.setproperty!(e::EntityState{TT}, f::Symbol, val) where {TT}
-    fn_to_DT = Dict{Symbol, DataType}()
-    ex = :(setfield!(e, f))
-    ex = Expr(:elseif, :(f === :id), :(return setfield!(getfield(e, :e), :id)::Int, val), ex)
-    for PDT in TT.parameters
-        DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
-        for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
-            if haskey(fn_to_DT, fn)
-                fnq = QuoteNode(fn)
-                DT_ = fn_to_DT[fn]
-                ft_ = fieldtype(DT_, fn)
-                ex = MacroTools.postwalk(ex) do x
-                    if @capture(x, setfield!(e[$DT_], $fnq, val))
-                        return quote
-                            throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
-                        end
-                    else
-                        return x
-                    end
-                end
-            else
-                fn_to_DT[fn] = DT
-                fnq = QuoteNode(fn)
-                ex = Expr(:elseif, :(f === $fnq), :(return setfield!(e[$DT], $fnq, val)), ex)
-            end
-        end
-    end
-    ex.head = :if
-    return quote
-        $(Expr(:meta, :inline))
-        $(Expr(:meta, :propagate_inbounds))
-        $ex
-    end
-end
-
-@generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
-    id = findfirst(x -> x <: AbstractComponent ? eltype(x) == T : x == T, TT.parameters)
-    return quote
-        $(Expr(:meta, :inline))
-        @inbounds getfield(e,:components)[$id]
-    end
-end
-
-
-@inline function Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData}
-    t = component(e, T)
-    if t isa AbstractComponent
-        return @inbounds t[e.e]
-    else
-        return t
-    end
-end
-    
-@inline function Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData}
-    t = component(e, T)
-    @assert t isa AbstractComponent "Cannot set a Component in a non referenced EntityState."
-    return @inbounds t[e] = x
-end
-    
-@inline Base.length(::EntityState{TT}) where {TT} = length(TT.parameters)
-@inline function Base.iterate(i::EntityState, state = 1)
-    state > length(i) && return nothing
-    return @inbounds i.components[state][i.e], state + 1
-end
- 
-@inline function Base.iterate(i::EntityIterator, state = i.it isa ReverseIndicesIterator ? length(i.it.shortest) : 1)
-    n = iterate(i.it, state)
-    n === nothing && return n
-    e = Entity(n[1])
-    return EntityState(e, i.components), n[2]
-end
-
-Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
-
-for (m, it_short, it) in zip((:entities_in, :safe_entities_in), (:indices_iterator, :reverse_indices_iterator), (:IndicesIterator, :ReverseIndicesIterator))
-    @eval macro $m(indices_expr)
-        expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
-        if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-            return esc(:(Overseer.EntityIterator($$it_short($(t_sets[1])), ($(t_sets[1]),))))
-        else
-            return esc(quote
-                t_comps = $(Expr(:tuple, t_sets...))
-                t_or_comps = $(Expr(:tuple, t_orsets...))
-                sets = map(Overseer.indices_iterator, t_comps)
-                orsets = map(Overseer.indices_iterator, t_or_comps)
-                if isempty(sets)
-                    minlen, minid = findmin(map(length, orsets))
-                    t_shortest = orsets[minid]
-                else
-                    minlen, minid = findmin(map(length, sets))
-                    t_shortest = sets[minid]
-                end
-                if $(!isempty(t_orsets))
-                    shortest = deepcopy(t_shortest)
-                    for s in orsets
-                        union!(shortest, s)
-                    end
-                else
-                    shortest = t_shortest
-                end
-                allcomps = (t_comps..., t_or_comps...,)
-                Overseer.EntityIterator($$it(shortest, x->$expr), allcomps)
-            end)
-        end
-    end
-
-    @eval macro $m(ledger, indices_expr)
-        expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
-        t_comp_defs = quote
-        end
-        comp_sym_map = Dict()
-        for s in [t_sets; t_notsets; t_orsets]
-            sym = gensym()
-            t_comp_defs = quote
-                $t_comp_defs
-                $sym = $ledger[$s]
-            end
-            comp_sym_map[s] = sym
-        end
-        t_comp_defs = MacroTools.rmlines(MacroTools.flatten(t_comp_defs))
-        
-        expr = MacroTools.postwalk(expr) do x
-            if x in keys(comp_sym_map)
-                return comp_sym_map[x]
-            else
-                return x
-            end
-        end
-        t_sets = map(x -> comp_sym_map[x], t_sets)
-        t_orsets = map(x -> comp_sym_map[x], t_orsets)
-        
-        if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-            return esc(quote
-                $t_comp_defs
-                Overseer.EntityIterator($$it_short($(t_sets[1])), ($(t_sets[1]),))
-            end)
-        else
-            return esc(quote
-                $t_comp_defs
-                t_comps = $(Expr(:tuple, t_sets...))
-                t_or_comps = $(Expr(:tuple, t_orsets...))
-                sets = map(Overseer.indices_iterator, t_comps)
-                orsets = map(Overseer.indices_iterator, t_or_comps)
-                if isempty(sets)
-                    minlen, minid = findmin(map(length, orsets))
-                    t_shortest = orsets[minid]
-                else
-                    minlen, minid = findmin(map(length, sets))
-                    t_shortest = sets[minid]
-                end
-                if $(!isempty(t_orsets))
-                    shortest = deepcopy(t_shortest)
-                    for s in orsets
-                        union!(shortest, s)
-                    end
-                else
-                    shortest = t_shortest
-                end
-                Overseer.EntityIterator($$it(shortest, x->$expr), (t_comps..., t_or_comps...,))
-            end)
-        end
-    end
-end    
-    
-function Base.:(==)(c1::C1, c2::C2) where {C1 <: AbstractComponent, C2 <: AbstractComponent}
-    if eltype(C1) != eltype(C2) ||length(c1) != length(c2)
-        return false
-    elseif length(c1) > 20 && hash(c1) != hash(c2)
-        return false
-    else
-        return all(e -> (e in c2) && (@inbounds c2[e] == c1[e]), @entities_in(c1))
-    end
-end
-
 ##############################
 #                            #
 #     Component Macros       #
 #                            #
 ##############################
-
 function process_typedef(typedef, mod)
     global td = nothing
     MacroTools.postwalk(typedef) do x
@@ -447,14 +214,18 @@ macro component(typedef)
 end
 function _component(typedef, mod)
     t = process_typedef(typedef, mod)
-	t1, tn = t
-	return quote
-	    $t1
-        Overseer.component_type(::Type{$tn}) = Overseer.Component
+    t1, tn = t
+    return quote
+        $t1
+        Overseer.component_type(::Type{T}) where {T<:$tn} = Overseer.Component{T}
     end
 end
 
-################################################################################
+########################################
+#                                      #
+#            PooledComponent           #
+#                                      #
+########################################
 
 struct ApplyToPool
     e::Entity
@@ -470,15 +241,17 @@ mutable struct PooledComponent{T <: ComponentData} <: AbstractComponent{T}
 end
 
 PooledComponent{T}() where {T <: ComponentData} = PooledComponent{T}(Indices(), Int[], Int[], T[])
-
-Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, e::AbstractEntity) = c.data[pool(c, e)]
-Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, i::Integer) = c.data[c.pool[i]]
 Base.@propagate_inbounds @inline pool(c::PooledComponent, e::AbstractEntity) = c.pool[c.indices[e.id]]
 Base.@propagate_inbounds @inline pool(c::PooledComponent, e::Int) = c.pool[c.indices[e]]
 
+entity_data(c::PooledComponent) = c.pool
+
 npools(c::PooledComponent) = length(c.data)
 
-Entity(c::PooledComponent, i::Int) = parent(c, i)
+Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, e::AbstractEntity) = c.data[pool(c, e)]
+Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, i::Integer) = c.data[c.pool[i]]
+
+entity(c::PooledComponent, i::Int) = parent(c, i)
 
 Base.@propagate_inbounds @inline function Base.parent(c::PooledComponent, i::Int)
     @boundscheck if i > length(c.data)
@@ -568,8 +341,6 @@ end
     return v
 end
 
-Base.length(c::PooledComponent) = length(c.pool)
-
 function Base.empty!(c::PooledComponent)
     empty!(c.indices)
     empty!(c.pool)
@@ -578,6 +349,17 @@ function Base.empty!(c::PooledComponent)
     return c
 end
 
+function maybe_cleanup_empty_pool!(c::PooledComponent, poolid)
+    if c.pool_size[poolid] == 0
+        deleteat!(c.data, poolid)
+        deleteat!(c.pool_size, poolid)
+        for i in eachindex(c.pool)
+            if c.pool[i] > poolid
+                c.pool[i] -= 1
+            end
+        end
+    end
+end
 
 function Base.pop!(c::PooledComponent, e::AbstractEntity)
     @boundscheck if !in(e, c)
@@ -594,44 +376,28 @@ function Base.pop!(c::PooledComponent, e::AbstractEntity)
         pop!(c.indices, e.id)
 
         val = c.data[g]
+        maybe_cleanup_empty_pool!(c, g)
 
-        if c.pool_size[g] == 0
-            deleteat!(c.data, g)
-            deleteat!(c.pool_size, g)
-            for i in eachindex(c.pool)
-                if c.pool[i] > g
-                    c.pool[i] -= 1
-                end
-            end
-        end
+        return val
     end
 
-    return val
 end
 function Base.pop!(c::PooledComponent)
     @boundscheck if isempty(c)
         throw(BoundsError(c))
     end
     @inbounds begin
-        id = pop!(c.indices)
+        pop!(c.indices)
         g = pop!(c.pool)
         val = c.data[g]
-        if c.pool_size[g] == 0
-            deleteat!(c.data, g)
-            deleteat!(c.pool_size, g)
-            for i in eachindex(c.pool)
-                if c.pool[i] > g
-                    c.pool[i] -= 1
-                end
-            end
-        end
-        return EntityState(Entity(id), (val,))
+        c.pool_size[g] -= 1
+        maybe_cleanup_empty_pool!(c, g)
+        return val
     end
 end
 
 @inline Base.iterate(c::PooledComponent, args...) = iterate(c.data, args...)
 Base.sortperm(c::PooledComponent) = sortperm(c.pool)
-
 
 macro pooled_component(typedef)
     return esc(Overseer._pooled_component(typedef, __module__))
@@ -642,7 +408,7 @@ function _pooled_component(typedef, mod)
     t1, tn = t 
     return quote
         $t1
-       	Overseer.component_type(::Type{$tn}) = Overseer.PooledComponent
+        Overseer.component_type(::Type{T}) where {T<:$tn} = Overseer.PooledComponent{T}
     end
 end
 
@@ -692,66 +458,3 @@ function make_unique!(c::PooledComponent)
     return
 end
 
-struct EntityPoolIterator{T}
-    c::PooledComponent{T}
-    pool_id::Int
-end
-
-indices_iterator(g::EntityPoolIterator) = g
-indices(g::EntityPoolIterator) = g
-
-function entity_pool(c::PooledComponent, pool_id::Int)
-    @boundscheck if length(c.data) < pool_id
-        throw(BoundsError(c, pool_id))
-    end
-    return EntityPoolIterator(c, pool_id)
-end
-
-@inline entity_index(it::EntityPoolIterator, i::Int) =
-    @inbounds it.c.indices.packed[findnext(isequal(it.pool_id), it.c.pool, i)]
-    
-@inline function Base.iterate(i::EntityPoolIterator, state = (1, 1))
-    state[2] > i.c.pool_size[i.pool_id] && return nothing
-    n = findnext(isequal(i.pool_id), i.c.pool, state[1])
-    n === nothing && return n
-    return Entity(i.c.indices.packed[n]), (n + 1, state[2] + 1)
-end
-
-Base.getindex(iterator::EntityPoolIterator, i) = iterate(iterator, (i, 1))[1]
-    
-Base.IteratorSize(::Type{EntityPoolIterator}) = Base.HasLength()
-Base.IteratorEltype(::Type{EntityPoolIterator}) = Base.HasEltype()
-Base.eltype(::EntityPoolIterator) = Entity
-Base.eltype(::Type{EntityPoolIterator}) = Entity
-Base.length(i::EntityPoolIterator) = i.c.pool_size[i.pool_id]
-
-function Base.filter(f, it::EntityPoolIterator)
-    j = 1
-    out = Vector{eltype(it)}(undef, length(it))
-    for e in it
-        @inbounds out[j] = e
-        j = f(e) ? j+1 : j
-    end
-    resize!(out, j-1)
-    sizehint!(out, length(out))
-    return out 
-end
-
-Base.@propagate_inbounds @inline Base.in(e::Entity, it::EntityPoolIterator) =
-    in(e, it.c) && @inbounds pool(it.c, e) == it.pool_id
-Base.@propagate_inbounds @inline Base.in(e::Int, it::EntityPoolIterator) =
-    in(e, it.c.indices) && @inbounds pool(it.c, e) == it.pool_id
-
-struct PoolsIterator{T}
-    c::PooledComponent{T}
-end
-
-pools(c::PooledComponent) = PoolsIterator(c)
-
-
-function Base.iterate(i::PoolsIterator, p = 1)
-    p > length(i.c.data) && return nothing
-    return (@inbounds i.c.data[p], EntityPoolIterator(i.c, p)), p+1
-end
-
-Base.length(i::PoolsIterator) = length(i.c)

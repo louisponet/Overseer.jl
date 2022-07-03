@@ -37,7 +37,7 @@ function Ledger(cs::AbstractComponent...)
 	return Ledger(comps)
 end
 
-Ledger(components::Type{<:ComponentData}...) = Ledger(map(x -> component_type(x){x}(), components)...)
+Ledger(components::Type{<:ComponentData}...) = Ledger(map(x -> component_type(x)(), components)...)
 
 function Ledger(stages::Stage...)
 	comps = Type{<:ComponentData}[] 
@@ -77,7 +77,7 @@ function Base.empty!(m::AbstractLedger)
 end
 
 function Base.getindex(m::AbstractLedger, ::Type{T}) where {T<:ComponentData}
-	return components(m)[T]::component_type(T){T}
+	return components(m)[T]::component_type(T)
 end
 
 Base.copy(m::AbstractLedger) = Ledger(copy(entities(m)),
@@ -136,7 +136,7 @@ end
 function ensure_component!(m::AbstractLedger, c::Type{T}) where {T<:ComponentData}
     if !(c in m)
         m_comps = components(m)
-        comp = component_type(c){c}()
+        comp = component_type(c)()
         m_comps[T] = comp
     end
 end
