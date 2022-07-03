@@ -36,6 +36,7 @@ Component{T}() where {T} = Component(Indices(), T[])
 Base.eltype(::Type{<:AbstractComponent{T}}) where T = T
 
 Base.length(c::AbstractComponent) = length(c.data)
+Base.size(c::AbstractComponent) = size(c.data)
 
 Base.in(i::Integer, c::AbstractComponent) = in(i, c.indices)
 Base.in(e::AbstractEntity, c::AbstractComponent)  = in(e.id, c)
@@ -55,8 +56,8 @@ function Base.permute!(c::AbstractComponent, permvec)
     permute!(c.indices, permvec)
 end
 
-Base.@propagate_inbounds @inline Base.getindex(c::Component,       e::AbstractEntity)  = c.data[c.indices[e.id]]
-Base.@propagate_inbounds @inline Base.getindex(c::Component,       i::Integer) = c.data[i]
+Base.@propagate_inbounds @inline Base.getindex(c::Component, e::AbstractEntity)  = c.data[c.indices[e.id]]
+Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
 
 @inline function Base.setindex!(c::Component{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
@@ -68,23 +69,6 @@ Base.@propagate_inbounds @inline Base.getindex(c::Component,       i::Integer) =
     @inbounds c.data[c.indices[eid]] = v
     return v
 end
-
-#TODO This is necessary  to support || in @entities_in, do we need that?
-# See below for the code without
-@inline function Base.pointer(c::Component{T}, e::AbstractEntity) where {T}
-    if e.id in c.indices
-        if T.mutable
-            unsafe_load(reinterpret(Ptr{Ptr{T}}, pointer(c.data, @inbounds c.indices[e.id])))
-        else
-            return pointer(c.data, @inbounds c.indices[e.id])
-        end
-    else
-        return Ptr{T}()
-    end
-end
-        
-# @inline Base.pointer(c::Component{T}, e::Entity) where {T}=
-#     pointer(c.data, @inbounds c.indices[e.id])
 
 function Base.empty!(c::Component)
     empty!(c.indices)
@@ -163,8 +147,7 @@ struct EntityIterator{T <: Union{AbstractIndicesIterator,Indices,AbstractGroup},
     it::T
     components::TT
 end
-
-    
+   
 Base.IteratorSize(::EntityIterator) = Base.SizeUnknown()
 Base.IteratorEltype(::EntityIterator) = Base.HasEltype()
 Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{TT}
@@ -176,6 +159,18 @@ function Base.filter(f, it::EntityIterator)
     for e in it
         @inbounds out[j] = e
         j = f(e) ? j+1 : j
+    end
+    resize!(out, j-1)
+    sizehint!(out, length(out))
+    return out 
+end
+
+function Base.map(f, it::EntityIterator)
+    j = 1
+    out = Vector{eltype(it)}(undef, length(it))
+    for e in it
+        @inbounds out[j] = f(e)
+        j += 1
     end
     resize!(out, j-1)
     sizehint!(out, length(out))
@@ -342,11 +337,7 @@ for (m, it_short, it) in zip((:entities_in, :safe_entities_in), (:indices_iterat
                     shortest = t_shortest
                 end
                 allcomps = (t_comps..., t_or_comps...,)
-                if length(allcomps) == 1
-                    return Overseer.EntityIterator($$it_short(shortest), allcomps)
-                else
-                    return Overseer.EntityIterator($$it(shortest, x->true), allcomps)
-                end
+                Overseer.EntityIterator($$it(shortest, x->$expr), allcomps)
             end)
         end
     end

@@ -3,7 +3,7 @@ module Overseer
     
     abstract type ComponentData end
 
-    abstract type AbstractComponent{T<:ComponentData} end
+    abstract type AbstractComponent{T<:ComponentData} <: AbstractVector{T} end
     abstract type AbstractGroup end
 
     abstract type System end
