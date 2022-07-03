@@ -280,27 +280,27 @@ end
     id = findfirst(x -> x <: AbstractComponent ? eltype(x) == T : x == T, TT.parameters)
     return quote
         $(Expr(:meta, :inline))
-        getfield(e,:components)[$id]
+        @inbounds getfield(e,:components)[$id]
     end
 end
 
 
-@inline Base.@propagate_inbounds function Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData}
+@inline function Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData}
     t = component(e, T)
     if t isa AbstractComponent
-        return t[e.e]
+        return @inbounds t[e.e]
     else
         return t
     end
 end
     
-@inline Base.@propagate_inbounds function Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData}
+@inline function Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData}
     t = component(e, T)
     @assert t isa AbstractComponent "Cannot set a Component in a non referenced EntityState."
-    return t[e] = x
+    return @inbounds t[e] = x
 end
     
-@inline Base.@propagate_inbounds Base.length(::EntityState{TT}) where {TT} = length(TT.parameters)
+@inline Base.length(::EntityState{TT}) where {TT} = length(TT.parameters)
 @inline function Base.iterate(i::EntityState, state = 1)
     state > length(i) && return nothing
     return @inbounds i.components[state][i.e], state + 1
@@ -341,7 +341,12 @@ for (m, it_short, it) in zip((:entities_in, :safe_entities_in), (:indices_iterat
                 else
                     shortest = t_shortest
                 end
-                Overseer.EntityIterator($$it(shortest, x->$expr), (t_comps..., t_or_comps...,))
+                allcomps = (t_comps..., t_or_comps...,)
+                if length(allcomps) == 1
+                    return Overseer.EntityIterator($$it_short(shortest), allcomps)
+                else
+                    return Overseer.EntityIterator($$it(shortest, x->true), allcomps)
+                end
             end)
         end
     end
