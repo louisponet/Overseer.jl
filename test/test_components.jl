@@ -49,7 +49,7 @@ for CT in (Component, PooledComponent)
             c[Entity(2)] = Test1(2)
 
 
-            redirect_stdout(() -> show(EntityState(Entity(2), (c[Entity(2)],))), devnull)
+            redirect_stdout(() -> show(EntityState(Entity(2), (c[Entity(2)],))))
 
             t = EntityState(Entity(2), (c[Entity(2)],))
             t.p = 4
