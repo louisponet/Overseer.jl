@@ -1,5 +1,6 @@
 using Parameters
 using Overseer: EntityState
+using Suppressor
 
 @with_kw mutable struct Test1 <: ComponentData
     p::Int = 0
@@ -48,8 +49,9 @@ for CT in (Component, PooledComponent)
 
             c[Entity(2)] = Test1(2)
 
-
-            redirect_stdout(() -> show(EntityState(Entity(2), (c[Entity(2)],))))
+            @suppress begin
+                show(EntityState(Entity(2), (c[Entity(2)],)))
+            end
 
             t = EntityState(Entity(2), (c[Entity(2)],))
             t.p = 4
