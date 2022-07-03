@@ -17,7 +17,6 @@ module Overseer
     
     abstract type AbstractEntity end
 
-    include("utils.jl")
     include("indices.jl")
     include("entity.jl")
     include("component.jl")

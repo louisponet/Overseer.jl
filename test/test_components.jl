@@ -1,7 +1,7 @@
 using Parameters
 using Overseer: EntityState
 
-@with_kw struct Test1 <: ComponentData
+@with_kw mutable struct Test1 <: ComponentData
     p::Int = 0
 end
 
@@ -47,6 +47,15 @@ for CT in (Component, PooledComponent)
             @test c[EntityState(Entity(2), (c[Entity(2)],))] == Test1(321)
 
             c[Entity(2)] = Test1(2)
+
+
+            redirect_stdout(() -> show(EntityState(Entity(2), (c[Entity(2)],))), devnull)
+
+            t = EntityState(Entity(2), (c[Entity(2)],))
+            t.p = 4
+            @test c[t].p == 4
+            @test c[Entity(2)].p == 4
+            t.p = 2
         end
         
         @testset "Basic map, filter" begin
@@ -184,6 +193,20 @@ for (CT1, CT2) in ((Component, PooledComponent, Component, PooledComponent), (Co
                 end
             end
             @test t == sum(2:2:10)
+
+            
+            t = 0
+            @test_throws ErrorException for e in @entities_in(c1 && c3)
+                e.p1 = 4    
+            end
+            for e in @entities_in(c1 && c3)
+                e.p = 4    
+            end
+            @test iterate(@entities_in(c1 && c3))[1].p == 4
+            for e in @entities_in(c1 && c3)
+                e[Test3] = Test3(234)    
+            end
+            @test iterate(@entities_in(c1 && c3))[1].p1 == 234
             
         end
         

@@ -261,13 +261,6 @@ Base.@propagate_inbounds @inline function Base.parent(c::PooledComponent, i::Int
 end
 Base.@propagate_inbounds @inline Base.parent(c::PooledComponent, e::Entity) = parent(c, pool(c, e))
     
-function is_unique_in(value, collection)
-    count = 0
-    for element in collection
-        count += element == value
-    end
-    return count == 1
-end
 
 # c[entity] = value
 # set value of <only> this entity

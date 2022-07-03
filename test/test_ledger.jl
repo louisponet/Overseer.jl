@@ -5,7 +5,7 @@ abstract type TComp <: ComponentData end
 @component struct T1 <: TComp end
 @component struct T2 end
 @component struct T3 <: TComp end
-@component struct T4 end
+@pooled_component struct T4 end
 
 struct TSys <: System end
 
@@ -69,11 +69,14 @@ delete_scheduled!(m)
 
 # Ensure delete_scheduled!() does nothing when no entities are scheduled for
 # deletion, but some of the old ids have been recycled
-for _ = 5:10
-    Entity(m, T4())
+par = Entity(m, T3(), T4())
+for _ = 5:9
+    Entity(m, par, T3())
 end
 delete_scheduled!(m)
 @test length(m[T4]) == 9
+
+@test length(entity_pool(m[T4], pool(m[T4], par))) == 6
 
 empty!(m)
 @test isempty(m.entities)
