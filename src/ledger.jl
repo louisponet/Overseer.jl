@@ -1,19 +1,17 @@
-#To implement AbstractLedger interface, the subtype should just define the function ledger
-#where all the fields are like in this one
-
 """
-    Basic Ledger. This takes care of creating and destroying entities,
-    making sure all the requested components for the systems are initialized,
-    and updates the systems.
+    Ledger
+
+A `Ledger` holds all the [`Entities`](@ref Entity), [`Components`](@ref) and [`Systems`](@ref). It has interfaces to create new [`Entities`](@ref Entity) and access the [`Components`](ref). Calling [`update(ledger)`](@ref Overseer.update) will call
+all the [`update`](@ref) functions of the systems in the `Ledger`.
 """
 mutable struct Ledger <: AbstractLedger
-	entities     ::Vector{Entity}
-	free_entities::Vector{Entity}
-	to_delete    ::Vector{Entity}
-	components   ::Dict{DataType, AbstractComponent}
-	groups       ::Vector{AbstractGroup}
+    entities     ::Vector{Entity}
+    free_entities::Vector{Entity}
+    to_delete    ::Vector{Entity}
+    components   ::Dict{DataType, AbstractComponent}
+    groups       ::Vector{AbstractGroup}
 
-	stages::Vector{Stage}
+    stages::Vector{Stage}
 end
 Ledger() = Ledger(Entity[],
                     Entity[],
@@ -30,24 +28,24 @@ function Ledger(comps::Dict{DataType, AbstractComponent})
 end
 
 function Ledger(cs::AbstractComponent...)
-	comps = Dict{DataType, AbstractComponent}()
-	for c in cs
-    	comps[eltype(c)] = c
-	end
-	return Ledger(comps)
+    comps = Dict{DataType, AbstractComponent}()
+    for c in cs
+        comps[eltype(c)] = c
+    end
+    return Ledger(comps)
 end
 
 Ledger(components::Type...) = Ledger(map(x -> component_type(x)(), components)...)
 
 function Ledger(stages::Stage...)
-	comps = Type[] 
-	for stage in stages
-		append!(comps, requested_components(stage)) 
-	end
-	m = Ledger(comps...)
-	m.stages=[stages...]
-	prepare(m)
-	return m
+    comps = Type[] 
+    for stage in stages
+        append!(comps, requested_components(stage)) 
+    end
+    m = Ledger(comps...)
+    m.stages=[stages...]
+    prepare(m)
+    return m
 end
 
 ledger(m::Ledger) = m
@@ -63,21 +61,32 @@ groups(m::AbstractLedger)           = ledger(m).groups
 singleton(m::AbstractLedger, ::Type{T}) where {T} = m[T][1]
 
 ##### BASE Extensions ####
+function Base.show(io::IO, mime::MIME{Symbol("text/plain")}, l::AbstractLedger)
+    summary(io, l)
+    println(io)
+    println(io, "Components:")
+    for (k, c) in components(l)
+        print(io, "\t")
+        summary(io, c)
+        println(io)
+    end
+    println(io, "Total entities: $(length(entities(l)))")
+end
 function Base.in(::Type{R}, m::AbstractLedger) where {R}
     return R ∈ keys(components(m))
 end
 
 function Base.empty!(m::AbstractLedger)
-	empty!(entities(m))
-	empty!(free_entities(m))
-	empty!(to_delete(m))
-	empty!(components(m))
-	empty!(stages(m))
-	empty!(groups(m))
+    empty!(entities(m))
+    empty!(free_entities(m))
+    empty!(to_delete(m))
+    empty!(components(m))
+    empty!(stages(m))
+    empty!(groups(m))
 end
 
 function Base.getindex(m::AbstractLedger, ::Type{T}) where {T}
-	return components(m)[T]::component_type(T)
+    return components(m)[T]::component_type(T)
 end
 
 Base.copy(m::AbstractLedger) = Ledger(copy(entities(m)),
@@ -88,14 +97,14 @@ Base.copy(m::AbstractLedger) = Ledger(copy(entities(m)),
                                       deepcopy(stages(m)))
 
 function Base.getindex(m::AbstractLedger, e::AbstractEntity)
-	entity_assert(m, e)		
-	data = AbstractComponent[]
-	for c in values(components(m))
-		if in(e, c)
-			push!(data, c)
-		end
-	end
-	return EntityState(convert(Entity, e), (data...,))
+    entity_assert(m, e)        
+    data = AbstractComponent[]
+    for c in values(components(m))
+        if in(e, c)
+            push!(data, c)
+        end
+    end
+    return EntityState(convert(Entity, e), (data...,))
 end
 
 function Base.getindex(v::Vector{Stage}, s::Symbol)
@@ -107,14 +116,14 @@ function Base.getindex(v::Vector{Stage}, s::Symbol)
 end
 
 function Base.setindex!(m::AbstractLedger, v::T, e::AbstractEntity) where {T}
-	entity_assert(m, e)
-	ensure_component!(m, T)
-	if !in(e, m[T])
+    entity_assert(m, e)
+    ensure_component!(m, T)
+    if !in(e, m[T])
         m[T][e] = v
         register_new!(m, T, e)
         return v
     end
-	return m[T][e] = v
+    return m[T][e] = v
 end
 
 function Base.setindex!(m::AbstractLedger, v::C, ::Type{T}) where {T, C <: AbstractComponent{T}}
@@ -160,17 +169,17 @@ function Base.insert!(m::AbstractLedger, i::Integer, stage::Stage)
 end
 
 function Base.push!(m::AbstractLedger, s::Symbol, sys::System)
-	st = stage(m, s) 
+    st = stage(m, s) 
     comps = requested_components(sys)
     for c in comps
         ensure_component!(m, c)
     end
-	push!(st, sys)
+    push!(st, sys)
     prepare(sys, m)
 end
 
 function Base.insert!(m::AbstractLedger, s::Symbol, i::Int, sys::System)
-	insert!(stage(m, s), i, sys)
+    insert!(stage(m, s), i, sys)
     comps = requested_components(sys)
     for c in comps
         ensure_component!(m, c)
@@ -179,14 +188,14 @@ function Base.insert!(m::AbstractLedger, s::Symbol, i::Int, sys::System)
 end
 
 function Base.delete!(m::AbstractLedger, e::AbstractEntity)
-	entity_assert(m, e)
-	push!(free_entities(m), e)
-	entities(m)[e.id] = EMPTY_ENTITY
-	for c in values(components(m))
-		if in(e, c)
-			pop!(c, e)
-		end
-	end
+    entity_assert(m, e)
+    push!(free_entities(m), e)
+    entities(m)[e.id] = EMPTY_ENTITY
+    for c in values(components(m))
+        if in(e, c)
+            pop!(c, e)
+        end
+    end
 end
 
 Base.isequal(F::C, G::C) where {C <: AbstractLedger} =
@@ -203,48 +212,48 @@ Base.:(==)(F::C, G::C) where {C <: AbstractLedger} =
 end
 
 function empty_entities!(m::AbstractLedger)
-	empty!(entities(m))
-	empty!(free_entities(m))
-	for c in values(components(m))
-    	empty!(c)
-	end
+    empty!(entities(m))
+    empty!(free_entities(m))
+    for c in values(components(m))
+        empty!(c)
+    end
 end
 
 function components(ledger::AbstractLedger, ::Type{T}) where {T}
-	comps = AbstractComponent[]
-	for c in values(components(ledger))
-		if eltype(c) <: T
-			push!(comps, c)
-		end
-	end
-	return comps
+    comps = AbstractComponent[]
+    for c in values(components(ledger))
+        if eltype(c) <: T
+            push!(comps, c)
+        end
+    end
+    return comps
 end
 
 function entity_assert(m::AbstractLedger, e::AbstractEntity)
-	es = entities(m)
-	@assert length(es) >= e.id "$e was never initiated."
-	@assert es[e.id] != EMPTY_ENTITY "$e was removed previously."
+    es = entities(m)
+    @assert length(es) >= e.id "$e was never initiated."
+    @assert es[e.id] != EMPTY_ENTITY "$e was removed previously."
 end
 
 function schedule_delete!(m::AbstractLedger, e::Entity)
-	entity_assert(m, e)
-	push!(to_delete(m), e)
+    entity_assert(m, e)
+    push!(to_delete(m), e)
 end
 
 function schedule_delete!(m::AbstractLedger, e::EntityState)
-	entity_assert(m, e)
-	push!(to_delete(m), e.e)
+    entity_assert(m, e)
+    push!(to_delete(m), e.e)
 end
 
 function delete_scheduled!(m::AbstractLedger)
-	for c in values(components(m))
-		delete!(c, to_delete(m))
-	end
-	for e in to_delete(m)
-		entities(m)[e.id] = EMPTY_ENTITY
-		push!(free_entities(m), e)
-	end
-	empty!(to_delete(m))
+    for c in values(components(m))
+        delete!(c, to_delete(m))
+    end
+    for e in to_delete(m)
+        entities(m)[e.id] = EMPTY_ENTITY
+        push!(free_entities(m), e)
+    end
+    empty!(to_delete(m))
 end
 
 function update(s::Stage, m::AbstractLedger)
@@ -254,13 +263,13 @@ function update(s::Stage, m::AbstractLedger)
 end
 
 function update(m::AbstractLedger)
-	for stage in stages(m)
-		update(stage, m)
-	end
+    for stage in stages(m)
+        update(stage, m)
+    end
 end
 
 function prepare(m::AbstractLedger)
-	for s in stages(m)
-		prepare(s, m)
-	end
+    for s in stages(m)
+        prepare(s, m)
+    end
 end

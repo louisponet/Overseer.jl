@@ -190,6 +190,32 @@ end
 
 Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
 
+"""
+    @entities_in
+
+This macro creates an iterator that iterates over all entities that are present
+in the components according to the expression passed to it. Each iteration an
+[`EntityState`](@ref) is returned that refers to the entity and the associated data
+inside the [`Components`](@ref).
+
+# Examples
+```jldoctest
+
+```
+"""
+macro entities_in(expr) end
+"""
+    @safe_entities_in
+
+Similar to [`@entities_in`](@ref) but safe to [`pop!`](@ref) entities during iteration.
+
+# Examples
+```jldoctest
+
+```
+"""
+macro safe_entities_in(expr) end
+    
 for (m, it_short, it) in zip((:entities_in, :safe_entities_in), (:indices_iterator, :reverse_indices_iterator), (:IndicesIterator, :ReverseIndicesIterator))
     @eval macro $m(indices_expr)
         expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
