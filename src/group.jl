@@ -66,7 +66,7 @@ Base.length(g::OrderedGroup) = g.len
 
 Base.in(c::AbstractComponent, g::OrderedGroup) = c in g.components
 
-group(m::AbstractLedger,  cs::Type{<:ComponentData}...; ordered=true) = group(m, map(x -> m[x], cs))
+group(m::AbstractLedger,  cs::Type...; ordered=true) = group(m, map(x -> m[x], cs))
 
 function group(m::AbstractLedger, comps)
     for g in groups(m)
@@ -138,7 +138,7 @@ end
 
 group(::Nothing, cs) = nothing
 
-@generated function Base.getindex(g::OrderedGroup{CT}, ::Type{T}) where {CT,T<:ComponentData}
+@generated function Base.getindex(g::OrderedGroup{CT}, ::Type{T}) where {CT,T}
     tid = findfirst(x -> eltype(x) == T, CT.parameters)
     return :(g.components[$tid])
 end
@@ -160,7 +160,7 @@ function register_new!(g::OrderedGroup, e::Entity)
     end
 end
 
-@inline function Base.setindex!(g::OrderedGroup, v::T, e::Entity) where {T<:ComponentData}
+@inline function Base.setindex!(g::OrderedGroup, v::T, e::Entity) where {T}
     comp = g[T]
     @boundscheck if !(e in comp)
         comp[e] = v

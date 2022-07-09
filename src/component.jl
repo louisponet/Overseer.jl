@@ -1,6 +1,6 @@
 using Test
 
-struct TestCompData <: ComponentData
+struct TestCompData
     t::Int
 end
 
@@ -43,21 +43,12 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
     @test isempty(c)
 end
 
-Base.isequal(F::C, G::C) where {C <: ComponentData} =
-    all(f -> isequal(getfield(F, f), getfield(G, f)), 1:nfields(F))::Bool
-    
-Base.:(==)(F::C, G::C) where {C <: ComponentData} =
-    all(f -> getfield(F, f)== getfield(G, f), 1:nfields(F))::Bool
+"""
+    component_type(::Type) 
 
-@inline function Base.hash(c::C, h::UInt) where {C <: ComponentData}
-    for f in nfields(c)
-        h = hash(getfield(c, f), h)
-    end
-    return h
-end
-
-"Can be used to specify the type of component storage to be used for a given `ComponentData`."
-component_type(::Type{TC}) where{TC<:ComponentData} = Component{TC}
+Function that can be overloaded to specify what the default [`AbstractComponent`](@ref) of a given type is. This is mainly used in the various component macros.
+"""
+component_type(::Type{TC}) where{TC} = Component{TC}
  
 @inline indices_iterator(a::AbstractComponent) = a.indices
 @inline reverse_indices_iterator(a::AbstractComponent) = ReverseIndicesIterator(a.indices, i -> true)
@@ -83,6 +74,13 @@ Base.@propagate_inbounds function Base.getindex(c::AbstractComponent, I::Abstrac
     return map(x -> c[x], I)
 end
 
+"""
+    swap_order!(c, entity1, entity2)
+
+Swaps the order of the data of `entity1` and `entity2`. This is useful to order
+multiple components in the same way so that iteration can be performed without
+performing checks, i.e. when using [`Groups`](@ref Groups).
+"""
 function swap_order!(c::AbstractComponent, e1::AbstractEntity, e2::AbstractEntity)
     @boundscheck if !in(e1, c)
         throw(BoundsError(c, e1))
@@ -119,11 +117,11 @@ Base.IndexStyle(::Type{AbstractComponent}) = IndexLinear()
 """
 The most basic Component type.
 
-Indexing into a component with an `Entity` will return the data linked to that entity,
-indexing with a regular `Int` will return directly the `ComponentData` that is stored in the data
-vector at that index, i.e. generally not the storage linked to the `Entity` with that `Int` as id.
+Indexing into a component with an [`Entity`](@ref) will return the data linked to that entity,
+indexing with a regular `Int` will return directly the data that is stored in the data
+vector at that index, i.e. generally not the storage linked to the [`Entity`](@ref) with that `Int` as id.
 """
-mutable struct Component{T <: ComponentData} <: AbstractComponent{T}
+mutable struct Component{T} <: AbstractComponent{T}
     indices::Indices
     data   ::Vector{T}
 end
@@ -191,32 +189,21 @@ function process_typedef(typedef, mod)
         end
         x
     end
-    tn = MacroTools.namify(td)
-    if @capture(td, T_ <: V_)
-        if !Base.eval(mod, :($V <: Overseer.ComponentData)) 
-            error("Components can only have supertypes which are subtypes of ComponentData.")
-        else
-            return typedef, tn
-        end
-    else
-        typedef_ = MacroTools.postwalk(typedef) do x
-            if MacroTools.isexpr(x) && x.head == :struct
-                x.args[2] = :($(x.args[2]) <: Overseer.ComponentData)
-            end
-            x
-        end
-        return typedef_, tn
-    end
+    return MacroTools.namify(td)
 end
 
+"""
+    @component
+
+This takes a struct definition and 
+"""
 macro component(typedef)
 	return esc(Overseer._component(typedef, __module__))
 end
 function _component(typedef, mod)
-    t = process_typedef(typedef, mod)
-    t1, tn = t
+    tn = process_typedef(typedef, mod)
     return quote
-        $t1
+        $typedef
         Overseer.component_type(::Type{T}) where {T<:$tn} = Overseer.Component{T}
     end
 end
@@ -233,14 +220,14 @@ end
 
 Base.parent(e::Entity) = ApplyToPool(e)
 
-mutable struct PooledComponent{T <: ComponentData} <: AbstractComponent{T}
+mutable struct PooledComponent{T} <: AbstractComponent{T}
     indices::Indices
     pool::Vector{Int}
     pool_size::Vector{Int}
     data::Vector{T}
 end
 
-PooledComponent{T}() where {T <: ComponentData} = PooledComponent{T}(Indices(), Int[], Int[], T[])
+PooledComponent{T}() where {T} = PooledComponent{T}(Indices(), Int[], Int[], T[])
 Base.@propagate_inbounds @inline pool(c::PooledComponent, e::AbstractEntity) = c.pool[c.indices[e.id]]
 Base.@propagate_inbounds @inline pool(c::PooledComponent, e::Int) = c.pool[c.indices[e]]
 
@@ -397,10 +384,9 @@ macro pooled_component(typedef)
 end
 
 function _pooled_component(typedef, mod)
-    t = process_typedef(typedef, mod)
-    t1, tn = t 
+    tn = process_typedef(typedef, mod) 
     return quote
-        $t1
+        $typedef
         Overseer.component_type(::Type{T}) where {T<:$tn} = Overseer.PooledComponent{T}
     end
 end

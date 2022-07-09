@@ -37,10 +37,10 @@ function Ledger(cs::AbstractComponent...)
 	return Ledger(comps)
 end
 
-Ledger(components::Type{<:ComponentData}...) = Ledger(map(x -> component_type(x)(), components)...)
+Ledger(components::Type...) = Ledger(map(x -> component_type(x)(), components)...)
 
 function Ledger(stages::Stage...)
-	comps = Type{<:ComponentData}[] 
+	comps = Type[] 
 	for stage in stages
 		append!(comps, requested_components(stage)) 
 	end
@@ -60,10 +60,10 @@ valid_entities(m::AbstractLedger)   = filter(x -> x.id != 0, entities(m))
 stages(m::AbstractLedger)           = ledger(m).stages
 stage(m::AbstractLedger, s::Symbol) = ledger(m).stages[s]
 groups(m::AbstractLedger)           = ledger(m).groups
-singleton(m::AbstractLedger, ::Type{T}) where {T<:ComponentData} = m[T][1]
+singleton(m::AbstractLedger, ::Type{T}) where {T} = m[T][1]
 
 ##### BASE Extensions ####
-function Base.in(::Type{R}, m::AbstractLedger) where {R<:ComponentData}
+function Base.in(::Type{R}, m::AbstractLedger) where {R}
     return R ∈ keys(components(m))
 end
 
@@ -76,7 +76,7 @@ function Base.empty!(m::AbstractLedger)
 	empty!(groups(m))
 end
 
-function Base.getindex(m::AbstractLedger, ::Type{T}) where {T<:ComponentData}
+function Base.getindex(m::AbstractLedger, ::Type{T}) where {T}
 	return components(m)[T]::component_type(T)
 end
 
@@ -106,7 +106,7 @@ function Base.getindex(v::Vector{Stage}, s::Symbol)
     return v[id]
 end
 
-function Base.setindex!(m::AbstractLedger, v::T, e::AbstractEntity) where {T<:ComponentData}
+function Base.setindex!(m::AbstractLedger, v::T, e::AbstractEntity) where {T}
 	entity_assert(m, e)
 	ensure_component!(m, T)
 	if !in(e, m[T])
@@ -117,12 +117,12 @@ function Base.setindex!(m::AbstractLedger, v::T, e::AbstractEntity) where {T<:Co
 	return m[T][e] = v
 end
 
-function Base.setindex!(m::AbstractLedger, v::C, ::Type{T}) where {T <: ComponentData, C <: AbstractComponent{T}}
+function Base.setindex!(m::AbstractLedger, v::C, ::Type{T}) where {T, C <: AbstractComponent{T}}
     return components(m)[T] = v
 end
 
 
-function register_new!(m::AbstractLedger, ::Type{T}, e::AbstractEntity) where {T<:ComponentData}
+function register_new!(m::AbstractLedger, ::Type{T}, e::AbstractEntity) where {T}
     for g in groups(m)
         if !(g isa OrderedGroup)
             continue
@@ -133,7 +133,7 @@ function register_new!(m::AbstractLedger, ::Type{T}, e::AbstractEntity) where {T
     end
 end
 
-function ensure_component!(m::AbstractLedger, c::Type{T}) where {T<:ComponentData}
+function ensure_component!(m::AbstractLedger, c::Type{T}) where {T}
     if !(c in m)
         m_comps = components(m)
         comp = component_type(c)()
@@ -210,7 +210,7 @@ function empty_entities!(m::AbstractLedger)
 	end
 end
 
-function components(ledger::AbstractLedger, ::Type{T}) where {T<:ComponentData}
+function components(ledger::AbstractLedger, ::Type{T}) where {T}
 	comps = AbstractComponent[]
 	for c in values(components(ledger))
 		if eltype(c) <: T

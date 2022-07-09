@@ -9,7 +9,7 @@ Base.push!(s::Stage, sys) = push!(last(s), sys)
 Base.insert!(s::Stage, i::Integer, sys) = insert!(last(s), i, sys)
 
 function requested_components(stage::Stage)
-    comps = Type{<:ComponentData}[]
+    comps = Type[]
 	for s in last(stage)
 		for c in requested_components(s)
 			push!(comps, c)

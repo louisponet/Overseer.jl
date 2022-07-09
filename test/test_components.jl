@@ -2,19 +2,20 @@ using Parameters
 using Overseer: EntityState
 using Suppressor
 
-@with_kw mutable struct Test1 <: ComponentData
+@with_kw mutable struct Test1
     p::Int = 0
 end
+Base.:(==)(t::Test1, t1::Test1) = t.p == t1.p
 
-@with_kw struct Test2 <: ComponentData
+@with_kw struct Test2 
     p::Int = 1
 end
 
-@with_kw struct Test3 <: ComponentData
+@with_kw struct Test3  
     p1::Int = 1
 end
 
-@with_kw struct Test4 <: ComponentData
+@with_kw struct Test4
     p::Int = 1
 end
 
@@ -403,12 +404,8 @@ end
     @test Overseer.component_type(Comp)       == Component{Comp}
     @test Overseer.component_type(PooledComp) == PooledComponent{PooledComp}
 
-    @test ParametricComp <: Overseer.ComponentData
-
-    @test ParametricCompKw <: Overseer.ComponentData
     @test ParametricCompKw().x == 1.0
     
-    @test ParametricCompFunc <: Overseer.ComponentData
     @test ParametricCompFunc().x == 1.0
     @test ParametricCompFunc{Int}().x === 1
 end

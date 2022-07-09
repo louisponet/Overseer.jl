@@ -20,7 +20,7 @@ function Entity(m::AbstractLedger)
     return e
 end
 
-function Entity(m::AbstractLedger, datas::ComponentData...)
+function Entity(m::AbstractLedger, datas...)
     e = Entity(m)
     for d in datas
         m[e] = d
@@ -32,7 +32,7 @@ function entity(c::AbstractComponent, i::Integer)
     return Entity(c.indices.packed[i])
 end
 
-function Entity(m::AbstractLedger, parent::Entity, datas::ComponentData...)
+function Entity(m::AbstractLedger, parent::Entity, datas...)
     e = Entity(m)
     for d in datas
         m[e] = d
@@ -149,7 +149,7 @@ end
     end
 end
 
-@generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T<:ComponentData}
+@generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T}
     id = findfirst(x -> x <: AbstractComponent ? eltype(x) == T : x == T, TT.parameters)
     return quote
         $(Expr(:meta, :inline))
@@ -158,7 +158,7 @@ end
 end
 
 
-@inline function Base.getindex(e::EntityState, ::Type{T}) where {T<:ComponentData}
+@inline function Base.getindex(e::EntityState, ::Type{T}) where {T}
     t = component(e, T)
     if t isa AbstractComponent
         return @inbounds t[e.e]
@@ -167,7 +167,7 @@ end
     end
 end
     
-@inline function Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T<:ComponentData}
+@inline function Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T}
     t = component(e, T)
     @assert t isa AbstractComponent "Cannot set a Component in a non referenced EntityState."
     return @inbounds t[e] = x

@@ -1,9 +1,7 @@
 module Overseer
     using MacroTools
     
-    abstract type ComponentData end
-
-    abstract type AbstractComponent{T<:ComponentData} <: AbstractVector{T} end
+    abstract type AbstractComponent{T} <: AbstractVector{T} end
     abstract type AbstractGroup end
 
     abstract type System end
@@ -26,7 +24,7 @@ module Overseer
     include("iteration.jl")
     
 
-    export AbstractLedger, Ledger, System, Stage, Component, PooledComponent, ComponentData, Entity, entity
+    export AbstractLedger, Ledger, System, Stage, Component, PooledComponent, Entity, entity
     export @component, @pooled_component
     export @safe_entities_in, @entities_in, entity_pool, pools, pool
 

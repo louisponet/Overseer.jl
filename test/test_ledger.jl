@@ -1,6 +1,6 @@
 using Overseer
 
-abstract type TComp <: ComponentData end
+abstract type TComp end
 
 @component struct T1 <: TComp end
 @component struct T2 end
