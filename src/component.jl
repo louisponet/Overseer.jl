@@ -376,7 +376,12 @@ function Base.pop!(c::PooledComponent)
     end
 end
 
-@inline Base.iterate(c::PooledComponent, args...) = iterate(c.data, args...)
+@inline function Base.iterate(c::PooledComponent, args...)
+    n = iterate(c.pool, args...)
+    n === nothing && return n
+    return @inbounds c.data[n[1]], @inbounds n[2]
+end
+
 Base.sortperm(c::PooledComponent) = sortperm(c.pool)
 
 macro pooled_component(typedef)
