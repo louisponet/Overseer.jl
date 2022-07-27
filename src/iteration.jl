@@ -326,6 +326,7 @@ function entity_pool(c::PooledComponent, pool_id::Int)
     end
     return EntityPoolIterator(c, pool_id)
 end
+entity_pool(c::PooledComponent, e::AbstractEntity) = entity_pool(c, pool(c, e))
 
 @inline entity_index(it::EntityPoolIterator, i::Int) =
     @inbounds it.c.indices.packed[findnext(isequal(it.pool_id), it.c.pool, i)]
