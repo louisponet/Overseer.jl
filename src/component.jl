@@ -203,7 +203,7 @@ end
 function _component(typedef, mod)
     tn = process_typedef(typedef, mod)
     return quote
-        $typedef
+        Base.@__doc__($typedef)
         Overseer.component_type(::Type{T}) where {T<:$tn} = Overseer.Component{T}
     end
 end
@@ -391,7 +391,7 @@ end
 function _pooled_component(typedef, mod)
     tn = process_typedef(typedef, mod) 
     return quote
-        $typedef
+        Base.@__doc__($typedef)
         Overseer.component_type(::Type{T}) where {T<:$tn} = Overseer.PooledComponent{T}
     end
 end
