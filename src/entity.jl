@@ -61,6 +61,7 @@ struct EntityState{TT<:Tuple} <: AbstractEntity
     e::Entity
     components::TT
 end
+EntityState(e::Entity, comps...) = EntityState(e, comps)
 
 Entity(e::EntityState) = e.e
 Base.convert(::Type{Entity}, e::EntityState) = Entity(e)

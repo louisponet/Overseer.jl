@@ -22,8 +22,8 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
     @test c[Entity(2)] isa TestCompData
 
     @test entity(c, 1) isa Entity
-    @test pop!(c, Entity(2)) isa TestCompData
-    @test pop!(c) isa TestCompData
+    @test pop!(c, Entity(2)) == TestCompData(1)
+    @test pop!(c) == EntityState(Entity(1), TestCompData(1))
     @test isempty(c)
     
     c[Entity(1)] = TestCompData(1)
@@ -165,7 +165,14 @@ function Base.pop!(c::Component, e::AbstractEntity)
     end
 end
 
-Base.pop!(c::AbstractComponent) = @inbounds pop!(c, entity(c, length(c)))
+function Base.pop!(c::AbstractComponent)
+    @boundscheck if isempty(c)
+        throw(BoundsError(c))
+    end
+    @inbounds begin
+        return EntityState(Entity(pop!(c.indices)), pop!(c.data))
+    end
+end
 
 @inline Base.iterate(c::Component, args...) = iterate(c.data, args...)
 
@@ -367,12 +374,12 @@ function Base.pop!(c::PooledComponent)
         throw(BoundsError(c))
     end
     @inbounds begin
-        pop!(c.indices)
+        e = Entity(pop!(c.indices))
         g = pop!(c.pool)
         val = c.data[g]
         c.pool_size[g] -= 1
         maybe_cleanup_empty_pool!(c, g)
-        return val
+        return EntityState(e, val)
     end
 end
 
