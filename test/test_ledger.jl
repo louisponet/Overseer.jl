@@ -91,15 +91,15 @@ struct TSys2 <: System end
 
 push!(m, :default, TSys())
 
-@test length(last(stage(m, :default))) == 2
+@test length(stage(m, :default).steps) == 2
 
 insert!(m, :default, 1, TSys2())
 
-@test last(stage(m, :default))[1] == TSys2()
+@test stage(m, :default).steps[1] == TSys2()
 
 insert!(m, 1, Stage(:test, [TSys(), TSys2()]))
 
-@test first(m.stages[1]) == :test
+@test m.stages[1].name == :test
 
 @test eltype(m[T4]) == T4
 

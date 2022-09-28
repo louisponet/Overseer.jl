@@ -1,4 +1,4 @@
-update(::S, m::AbstractLedger) where {S<:System}= error("No update method implemented for $S")
+update(::S, l::AbstractLedger) where {S<:System}= error("No update method implemented for $S")
 
 """
     requested_components(::System)
@@ -24,26 +24,44 @@ Components:
 """
 requested_components(::System) = ()
 
-const Stage = Pair{Symbol, Vector{System}}
-
-Base.push!(s::Stage, sys) = push!(last(s), sys)
-
-Base.insert!(s::Stage, i::Integer, sys) = insert!(last(s), i, sys)
-
-function requested_components(stage::Stage)
-    comps = Type[]
-	for s in last(stage)
-		for c in requested_components(s)
-			push!(comps, c)
-		end
-	end
-	return comps
+struct Stage
+    name::Symbol
+    steps::Vector{Union{System, Stage, Vector}} 
 end
 
-function prepare(s::Stage, m::AbstractLedger)
-    for sys in last(s)
-        prepare(sys, m)
+Base.push!(s::Stage, step) = push!(s.steps, step)
+
+Base.insert!(s::Stage, i::Integer, step) = insert!(s.steps, i, step)
+
+function requested_components(systems::Vector)
+    comps = Type[]
+    for s in systems
+        append!(comps, requested_components(s))
+    end
+    return comps
+end
+requested_components(stage::Stage) = requested_components(stage.steps)
+
+function prepare(systems::Vector, l::AbstractLedger)
+    for sys in systems
+        prepare(sys, l)
     end
 end
+    
+prepare(s::Stage, l::AbstractLedger) = prepare(s.steps, l)
 
 prepare(::System, ::AbstractLedger) = nothing
+
+function update(stage::Stage, l::AbstractLedger)
+    # Steps in a stage get executed in sequence, but if
+    # a step is a vector they are threaded
+    for step in stage.steps
+        if step isa Vector
+            Threads.@threads for t in step
+                update(t, l)
+            end
+        else
+            update(step, l)
+        end
+    end
+end

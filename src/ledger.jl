@@ -18,7 +18,7 @@ Ledger() = Ledger(Entity[],
                     Entity[],
                     Dict{DataType, AbstractComponent}(),
                     AbstractGroup[],
-                    Pair{Symbol, Vector{System}}[])
+                    Stage[])
 
 function Ledger(comps::Dict{DataType, AbstractComponent})
     out = Ledger()
@@ -54,14 +54,14 @@ components(m::AbstractLedger)       = ledger(m).components
 entities(m::AbstractLedger)         = ledger(m).entities
 free_entities(m::AbstractLedger)    = ledger(m).free_entities
 to_delete(m::AbstractLedger)        = ledger(m).to_delete
+stage(m::AbstractLedger, name)      = stage(ledger(m), name)
 valid_entities(m::AbstractLedger)   = filter(x -> x.id != 0, entities(m))
 stages(m::AbstractLedger)           = ledger(m).stages
-stage(m::AbstractLedger, s::Symbol) = ledger(m).stages[s]
 groups(m::AbstractLedger)           = ledger(m).groups
 singleton(m::AbstractLedger, ::Type{T}) where {T} = m[T][1]
 
 ##### BASE Extensions ####
-function Base.show(io::IO, mime::MIME{Symbol("text/plain")}, l::AbstractLedger)
+function Base.show(io::IO, l::AbstractLedger)
     summary(io, l)
     println(io)
     println(io, "Components:")
@@ -107,12 +107,12 @@ function Base.getindex(m::AbstractLedger, e::AbstractEntity)
     return EntityState(convert(Entity, e), (data...,))
 end
 
-function Base.getindex(v::Vector{Stage}, s::Symbol)
-    id = findfirst(x->first(x) == s, v)
+function stage(l::Ledger, s::Symbol)
+    id = findfirst(x-> x.name == s, l.stages)
     if id === nothing
         error("Stage $s not found.")
     end
-    return v[id]
+    return l.stages[id]
 end
 
 function Base.setindex!(m::AbstractLedger, v::T, e::AbstractEntity) where {T}
@@ -129,7 +129,6 @@ end
 function Base.setindex!(m::AbstractLedger, v::C, ::Type{T}) where {T, C <: AbstractComponent{T}}
     return components(m)[T] = v
 end
-
 
 function register_new!(m::AbstractLedger, ::Type{T}, e::AbstractEntity) where {T}
     for g in groups(m)
@@ -254,12 +253,6 @@ function delete_scheduled!(m::AbstractLedger)
         push!(free_entities(m), e)
     end
     empty!(to_delete(m))
-end
-
-function update(s::Stage, m::AbstractLedger)
-    for s in last(s)
-        update(s, m)
-    end
 end
 
 function update(m::AbstractLedger)
