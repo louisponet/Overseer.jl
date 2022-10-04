@@ -347,6 +347,7 @@ Base.IteratorEltype(::Type{EntityPoolIterator}) = Base.HasEltype()
 Base.eltype(::EntityPoolIterator) = Entity
 Base.eltype(::Type{EntityPoolIterator}) = Entity
 Base.length(i::EntityPoolIterator) = i.c.pool_size[i.pool_id]
+Base.lastindex(i::EntityPoolIterator) = length(i)
 
 function Base.filter(f, it::EntityPoolIterator)
     j = 1
