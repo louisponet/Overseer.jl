@@ -105,7 +105,7 @@ insert!(m, 1, Stage(:test, [TSys(), TSys2()]))
 
 prepare(m)
 @test !isempty(entities(m))
-@test singleton(m, T4) == T4()
+@test singleton(m, T4) == Overseer.EntityState(Entity(1), T4())
 
 
 struct SmallSys <: System end
