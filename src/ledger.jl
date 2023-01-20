@@ -58,7 +58,7 @@ stage(m::AbstractLedger, name)      = stage(ledger(m), name)
 valid_entities(m::AbstractLedger)   = filter(x -> x.id != 0, entities(m))
 stages(m::AbstractLedger)           = ledger(m).stages
 groups(m::AbstractLedger)           = ledger(m).groups
-singleton(m::AbstractLedger, ::Type{T}) where {T} = m[T][1]
+singleton(m::AbstractLedger, ::Type{T}) where {T} = EntityState(entity(m[T], 1), m[T])
 
 ##### BASE Extensions ####
 function Base.show(io::IO, l::AbstractLedger)

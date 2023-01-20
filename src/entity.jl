@@ -45,6 +45,8 @@ function Entity(m::AbstractLedger, parent::Entity, datas...)
     return e
 end
 
+Entity(e::Entity) = e
+
 Base.iterate(e::Entity, state=1) = state > 1 ? nothing : (e, state+1)
 
 const EMPTY_ENTITY = Entity(0)

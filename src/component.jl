@@ -83,9 +83,9 @@ performing checks, i.e. when using [`Groups`](@ref Groups).
 """
 function swap_order!(c::AbstractComponent, e1::AbstractEntity, e2::AbstractEntity)
     @boundscheck if !in(e1, c)
-        throw(BoundsError(c, e1))
+        throw(BoundsError(c, Entity(e1)))
     elseif !in(e2, c)
-        throw(BoundsError(c, e2))
+        throw(BoundsError(c, Entity(e2)))
     end
     @inbounds begin
         id1, id2 = swap_order!(c.indices, e1.id, e2.id)
@@ -131,8 +131,15 @@ Component{T}() where {T} = Component(Indices(), T[])
 entity_data(c::Component) = c.data
 
 ##### BASE Extensions ####
-Base.@propagate_inbounds @inline Base.getindex(c::Component, e::AbstractEntity)  = c.data[c.indices[e.id]]
 Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
+
+@inline function Base.getindex(c::Component, e::AbstractEntity)
+    eid = e.id
+    @boundscheck if !in(e, c)
+        throw(BoundsError(c, Entity(e)))
+    end
+    return @inbounds c.data[c.indices[eid]]
+end
 
 @inline function Base.setindex!(c::Component{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
@@ -153,7 +160,7 @@ end
 
 function Base.pop!(c::Component, e::AbstractEntity)
     @boundscheck if !in(e, c)
-        throw(BoundsError(c, e))
+        throw(BoundsError(c, Entity(e)))
     end
     @inbounds begin
         id = c.indices[e.id]
@@ -242,8 +249,14 @@ entity_data(c::PooledComponent) = c.pool
 
 npools(c::PooledComponent) = length(c.data)
 
-Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, e::AbstractEntity) = c.data[pool(c, e)]
 Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, i::Integer) = c.data[c.pool[i]]
+
+@inline function Base.getindex(c::PooledComponent, e::AbstractEntity)
+    @boundscheck if !in(e, c)
+        throw(BoundsError(c, Entity(e)))
+    end
+    return @inbounds c.data[pool(c, e)]
+end
 
 Base.@propagate_inbounds @inline function Base.parent(c::PooledComponent, i::Int)
     @boundscheck if i > length(c.data)
@@ -285,7 +298,7 @@ end
 # set the value of this entity to that of parent
 @inline function Base.setindex!(c::PooledComponent, p::AbstractEntity, e::AbstractEntity)
     @boundscheck if !in(p, c)
-        throw(BoundsError(c, p))
+        throw(BoundsError(c, Entity(p)))
     end
     @inbounds begin
         pg = pool(c, p)
@@ -320,7 +333,7 @@ end
 @inline function Base.setindex!(c::PooledComponent{T}, v::T, x::ApplyToPool) where {T}
     e = x.e
     @boundscheck if !in(e, c)
-        throw(BoundsError(c, e))
+        throw(BoundsError(c, Entity(e)))
     end
     @inbounds c.data[pool(c, e.id)] = v
     return v
@@ -348,7 +361,7 @@ end
 
 function Base.pop!(c::PooledComponent, e::AbstractEntity)
     @boundscheck if !in(e, c)
-        throw(BoundsError(c, e))
+        throw(BoundsError(c, Entity(e)))
     end
 
     @inbounds begin
