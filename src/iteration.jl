@@ -27,6 +27,15 @@ Base.in(i::Int, it::AbstractIndicesIterator) = it.test(i)
     return it_length
 end
 
+@inline function Base.last(it::IndicesIterator)
+    for i = length(it.shortest):-1:1
+        @inbounds id = entity_index(it.shortest, i)
+        if it.test(id)
+            return id
+        end
+    end
+end
+
 Base.@propagate_inbounds @inline entity_index(c::Union{<:AbstractComponent, Indices}, i::Int) = indices(c).packed[i]
 
 @inline function Base.iterate(it::IndicesIterator, state=1)
@@ -59,6 +68,16 @@ end
         end
     end
 end
+
+@inline function Base.last(it::ReverseIndicesIterator)
+    for i = 1:length(it.shortest)
+        @inbounds id = entity_index(it.shortest, i)
+        if it.test(id)
+            return id
+        end
+    end
+end
+
 
 for (m, it) in zip((:indices_in, :reverse_indices_in), (:IndicesIterator, :ReverseIndicesIterator))
     @eval macro $m(indices_expr)
@@ -188,7 +207,7 @@ Base.in(e::AbstractEntity, i::EntityIterator) = in(e.id, i.it)
     return EntityState(e, i.components), n[2]
 end
 
-Base.getindex(iterator::EntityIterator, i) = Entity(iterator.it.shortest.packed[i])
+Base.last(i::EntityIterator) = EntityState(Entity(last(i.it)), i.components)
 
 for (m, it_short, it) in zip((:entities_in, :safe_entities_in), (:indices_iterator, :reverse_indices_iterator), (:IndicesIterator, :ReverseIndicesIterator))
     @eval macro $m(indices_expr)

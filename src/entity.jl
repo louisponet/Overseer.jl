@@ -80,6 +80,8 @@ function Base.show(io::IO, e::EntityState)
     end
 end
 
+Base.in(::Type{T}, e::EntityState{TT}) where {T, TT} = any(x->eltype(x) == T, TT.parameters)
+
 # TODO: Cleanup, can these two be merged?
 @generated function Base.getproperty(e::EntityState{TT}, f::Symbol) where {TT}
     fn_to_DT = Dict{Symbol, DataType}()
@@ -96,7 +98,7 @@ end
                 ex = MacroTools.postwalk(ex) do x
                     if @capture(x, return getfield(e[$DT_], $fnq)::$ft_)
                         return quote
-                            throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
+                            error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead.")
                         end
                     else
                         return x
@@ -131,7 +133,7 @@ end
                 ex = MacroTools.postwalk(ex) do x
                     if @capture(x, setfield!(e[$DT_], $fnq, val))
                         return quote
-                            throw(error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead."))
+                            error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead.")
                         end
                     else
                         return x
@@ -154,6 +156,9 @@ end
 
 @generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T}
     id = findfirst(x -> x <: AbstractComponent ? eltype(x) == T : x == T, TT.parameters)
+    if id === nothing
+        error("EntityState{$TT} has no Component{$T}.")
+    end
     return quote
         $(Expr(:meta, :inline))
         @inbounds getfield(e,:components)[$id]

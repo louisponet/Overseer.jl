@@ -38,11 +38,7 @@ end
 Ledger(components::Type...) = Ledger(map(x -> component_type(x)(), components)...)
 
 function Ledger(stages::Stage...)
-    comps = Type[] 
-    for stage in stages
-        append!(comps, requested_components(stage)) 
-    end
-    m = Ledger(comps...)
+    m = Ledger()
     m.stages=[stages...]
     prepare(m)
     return m
@@ -261,8 +257,17 @@ function update(m::AbstractLedger)
     end
 end
 
+"""
+    prepare(m)
+
+Goes through all [`Stages`](@ref Stage) in `m`, makes sure that all [`requested_components`](@ref) are present in `m`,
+and then calls [`prepare`](@ref) on the [`Stage`](@ref).
+"""
 function prepare(m::AbstractLedger)
-    for s in stages(m)
-        prepare(s, m)
+    for stage in stages(m)
+        for ct in requested_components(stage)
+            ensure_component!(m, ct)
+        end
+        prepare(stage, m)
     end
 end
