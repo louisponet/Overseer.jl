@@ -61,10 +61,13 @@ function Base.show(io::IO, l::AbstractLedger)
     summary(io, l)
     println(io)
     println(io, "Components:")
+    compstrings = []
     for (k, c) in components(l)
-        print(io, "\t")
-        summary(io, c)
-        println(io)
+        push!(compstrings, split(summary(c)))
+    end
+    for s in sort(compstrings, by = x->x[2])
+        print(io, "  ")
+        println(io, join(s, " "))
     end
     println(io, "Total entities: $(length(entities(l)))")
 end

@@ -181,10 +181,12 @@ Base.popfirst!(s::Indices) = pop!(s, first(s))
 
 Base.last(s::Indices) = isempty(s) ? throw(ArgumentError("Empty set has no last element.")) : last(s.packed)
 
-Base.union(s::Indices, ns) = union!(copy(s), ns)
-function Base.union!(s::Indices, ns)
-    for n in ns
-        push!(s, n)
+Base.union(s::Indices, ns...) = union!(copy(s), ns...)
+function Base.union!(s::Indices, ns...)
+    for set in ns
+        for n in set
+            push!(s, n)
+        end
     end
     return s
 end

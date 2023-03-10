@@ -209,36 +209,46 @@ end
 
 Base.last(i::EntityIterator) = EntityState(Entity(last(i.it)), i.components)
 
+function iterator_expr(expr, t_sets, t_notsets, t_orsets, it, it_short)
+    if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
+        return :(Overseer.EntityIterator($it_short($(t_sets[1])), ($(t_sets[1]),)))
+    else
+        t_comps    = gensym("t_comps")
+        t_or_comps = gensym("t_or_comps")
+        sets       = gensym("sets")
+        t_shortest = gensym("t_shortest")
+        if isempty(t_sets)
+            t_shortest_expr = quote
+                $sets = map(Overseer.indices_iterator, $t_or_comps)
+                $t_shortest = $sets[findmin(map(length, $sets))[2]]
+            end
+        else
+            t_shortest_expr = quote
+                $sets = map(Overseer.indices_iterator, $t_comps)
+                $t_shortest = $sets[findmin(map(length, $sets))[2]]
+            end
+        end
+        if !isempty(t_orsets)
+            t_shortest_expr = quote
+                $t_shortest_expr
+                $t_shortest = union($t_shortest, map(x->Overseer.indices_iterator(x), $t_or_comps)...)
+            end
+        end                    
+            
+        return MacroTools.flatten(quote
+            $t_comps = $(Expr(:tuple, t_sets...))
+            $t_or_comps = $(Expr(:tuple, t_orsets...))
+            $t_shortest_expr
+            Overseer.EntityIterator($it($t_shortest, x->$expr), ($t_comps..., $t_or_comps...,))
+        end)
+    end
+end
+
 for (m, it_short, it) in zip((:entities_in, :safe_entities_in), (:indices_iterator, :reverse_indices_iterator), (:IndicesIterator, :ReverseIndicesIterator))
+
     @eval macro $m(indices_expr)
         expr, t_sets, t_notsets, t_orsets = expand_indices_bool(indices_expr)
-        if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-            return esc(:(Overseer.EntityIterator($$it_short($(t_sets[1])), ($(t_sets[1]),))))
-        else
-            return esc(quote
-                t_comps = $(Expr(:tuple, t_sets...))
-                t_or_comps = $(Expr(:tuple, t_orsets...))
-                sets = map(Overseer.indices_iterator, t_comps)
-                orsets = map(Overseer.indices_iterator, t_or_comps)
-                if isempty(sets)
-                    minlen, minid = findmin(map(length, orsets))
-                    t_shortest = orsets[minid]
-                else
-                    minlen, minid = findmin(map(length, sets))
-                    t_shortest = sets[minid]
-                end
-                if $(!isempty(t_orsets))
-                    shortest = deepcopy(t_shortest)
-                    for s in orsets
-                        union!(shortest, s)
-                    end
-                else
-                    shortest = t_shortest
-                end
-                allcomps = (t_comps..., t_or_comps...,)
-                Overseer.EntityIterator($$it(shortest, x->$expr), allcomps)
-            end)
-        end
+        return esc(iterator_expr(expr, t_sets, t_notsets, t_orsets, $it, $it_short))
     end
 
     @eval macro $m(ledger, indices_expr)
@@ -265,37 +275,10 @@ for (m, it_short, it) in zip((:entities_in, :safe_entities_in), (:indices_iterat
         end
         t_sets = map(x -> comp_sym_map[x], t_sets)
         t_orsets = map(x -> comp_sym_map[x], t_orsets)
-        
-        if length(t_sets) == 1 && isempty(t_orsets) && expr.args[2] isa Symbol
-            return esc(quote
-                $t_comp_defs
-                Overseer.EntityIterator($$it_short($(t_sets[1])), ($(t_sets[1]),))
-            end)
-        else
-            return esc(quote
-                $t_comp_defs
-                t_comps = $(Expr(:tuple, t_sets...))
-                t_or_comps = $(Expr(:tuple, t_orsets...))
-                sets = map(Overseer.indices_iterator, t_comps)
-                orsets = map(Overseer.indices_iterator, t_or_comps)
-                if isempty(sets)
-                    minlen, minid = findmin(map(length, orsets))
-                    t_shortest = orsets[minid]
-                else
-                    minlen, minid = findmin(map(length, sets))
-                    t_shortest = sets[minid]
-                end
-                if $(!isempty(t_orsets))
-                    shortest = deepcopy(t_shortest)
-                    for s in orsets
-                        union!(shortest, s)
-                    end
-                else
-                    shortest = t_shortest
-                end
-                Overseer.EntityIterator($$it(shortest, x->$expr), (t_comps..., t_or_comps...,))
-            end)
-        end
+        return esc(quote
+            $t_comp_defs
+            $(iterator_expr(expr, t_sets, t_notsets, t_orsets, $it, $it_short))
+        end)
     end
 end
 
