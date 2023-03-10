@@ -96,10 +96,13 @@ end
 
 function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:Integer})
     permute!(entity_data(c), permvec)
+    permute!(c.indices, permvec)
     return c
 end
 
 Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:AbstractEntity}) = permute!(c, map(x->c.indices[x.id], permvec))
+
+Base.sortperm(c::AbstractComponent, args...; kwargs...) = sortperm(entity_data(c), args...; kwargs...)
 
 function Base.:(==)(c1::C1, c2::C2) where {C1 <: AbstractComponent, C2 <: AbstractComponent}
     if eltype(C1) != eltype(C2) ||length(c1) != length(c2)
