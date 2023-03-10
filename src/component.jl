@@ -96,7 +96,6 @@ end
 
 function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:Integer})
     permute!(entity_data(c), permvec)
-    permute!(c.indices, permvec)
     return c
 end
 
