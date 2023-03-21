@@ -69,7 +69,7 @@ function Base.show(io::IO, l::AbstractLedger)
         print(io, "  ")
         println(io, join(s, " "))
     end
-    println(io, "Total entities: $(length(entities(l)))")
+    println(io, "Total entities: $(length(entities(l)) - length(free_entities(l)))")
 end
 function Base.in(::Type{R}, m::AbstractLedger) where {R}
     return R ∈ keys(components(m))
@@ -227,10 +227,13 @@ function components(ledger::AbstractLedger, ::Type{T}) where {T}
     return comps
 end
 
-function entity_assert(m::AbstractLedger, e::AbstractEntity)
+function Base.in(e::AbstractEntity, m::AbstractLedger)
     es = entities(m)
-    @assert length(es) >= e.id "$e was never initiated."
-    @assert es[e.id] != EMPTY_ENTITY "$e was removed previously."
+    return length(es) >= e.id && es[Entity(e).id] != EMPTY_ENTITY
+end
+
+function entity_assert(m::AbstractLedger, e::AbstractEntity)
+    @assert e in m "$(Entity(e)) does not exist, either never initiated or removed previously."
 end
 
 function schedule_delete!(m::AbstractLedger, e::Entity)

@@ -50,7 +50,7 @@ Function that can be overloaded to specify what the default [`AbstractComponent`
 """
 component_type(::Type{TC}) where{TC} = Component{TC}
  
-@inline indices_iterator(a::AbstractComponent) = a.indices
+@inline indices_iterator(a::AbstractComponent)::Indices = a.indices
 @inline reverse_indices_iterator(a::AbstractComponent) = ReverseIndicesIterator(a.indices, i -> true)
 
 Base.in(i::Integer,        c::AbstractComponent)  = in(i, c.indices)
