@@ -266,7 +266,7 @@ for (m, it_short, it) in zip((:entities_in, :safe_entities_in), (:indices_iterat
         end
         t_comp_defs = MacroTools.rmlines(MacroTools.flatten(t_comp_defs))
         
-        expr = MacroTools.postwalk(expr) do x
+        expr = MacroTools.prewalk(expr) do x
             if x in keys(comp_sym_map)
                 return comp_sym_map[x]
             else
@@ -316,7 +316,7 @@ Similar to [`@entities_in`](@ref) but safe to [`pop!`](@ref) entities during ite
 #                                      #
 ########################################
     
-struct EntityPoolIterator{T}
+struct EntityPoolIterator{T} <: AbstractVector{T}
     c::PooledComponent{T}
     pool_id::Int
 end
@@ -350,6 +350,7 @@ Base.eltype(::EntityPoolIterator) = Entity
 Base.eltype(::Type{EntityPoolIterator}) = Entity
 Base.length(i::EntityPoolIterator) = i.c.pool_size[i.pool_id]
 Base.lastindex(i::EntityPoolIterator) = length(i)
+Base.size(i::EntityPoolIterator) = (length(i),)
 
 function Base.filter(f, it::EntityPoolIterator)
     j = 1

@@ -65,3 +65,19 @@ function update(stage::Stage, l::AbstractLedger)
         end
     end
 end
+
+function Base.in(s::System, stage::Stage)
+    for step in stage.steps
+        
+        if step == s
+            return true
+        end
+        
+        if step isa Vector
+            return any(x -> x isa System && x == s || s in x, step)
+        end
+        
+    end
+    return false
+end
+            

@@ -54,7 +54,7 @@ component_type(::Type{TC}) where{TC} = Component{TC}
 @inline reverse_indices_iterator(a::AbstractComponent) = ReverseIndicesIterator(a.indices, i -> true)
 
 Base.in(i::Integer,        c::AbstractComponent)  = in(i, c.indices)
-Base.in(e::AbstractEntity, c::AbstractComponent)  = in(e.id, c)
+Base.in(e::AbstractEntity, c::AbstractComponent)  = in(Entity(e).id, c)
 
 Base.length(c::AbstractComponent)  = length(c.indices)
 Base.size(c::AbstractComponent)    = size(c.indices)
@@ -136,7 +136,7 @@ entity_data(c::Component) = c.data
 Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
 
 @inline function Base.getindex(c::Component, e::AbstractEntity)
-    eid = e.id
+    eid = Entity(e).id
     @boundscheck if !in(e, c)
         throw(BoundsError(c, Entity(e)))
     end
@@ -144,7 +144,7 @@ Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.dat
 end
 
 @inline function Base.setindex!(c::Component{T}, v::T, e::AbstractEntity) where {T}
-    eid = e.id
+    eid = Entity(e).id
     @boundscheck if !in(e, c)
         push!(c.indices, eid)
         push!(c.data, v)

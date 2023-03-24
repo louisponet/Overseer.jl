@@ -57,7 +57,7 @@ groups(m::AbstractLedger)           = ledger(m).groups
 singleton(m::AbstractLedger, ::Type{T}) where {T} = EntityState(entity(m[T], 1), m[T])
 
 ##### BASE Extensions ####
-function Base.show(io::IO, l::AbstractLedger)
+function Base.show(io::IO, ::MIME"text/plain", l::AbstractLedger)
     summary(io, l)
     println(io)
     println(io, "Components:")
@@ -229,7 +229,7 @@ end
 
 function Base.in(e::AbstractEntity, m::AbstractLedger)
     es = entities(m)
-    return length(es) >= e.id && es[Entity(e).id] != EMPTY_ENTITY
+    return length(es) >= Entity(e).id && es[Entity(e).id] != EMPTY_ENTITY
 end
 
 function entity_assert(m::AbstractLedger, e::AbstractEntity)
