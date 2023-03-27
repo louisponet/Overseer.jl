@@ -342,7 +342,7 @@ entity_pool(c::PooledComponent, e::AbstractEntity) = entity_pool(c, pool(c, e))
     return Entity(i.c.indices.packed[n]), (n + 1, state[2] + 1)
 end
 
-Base.getindex(iterator::EntityPoolIterator, i) = iterate(iterator, (i, 1))[1]
+Base.getindex(iterator::EntityPoolIterator, i::Int) = iterate(iterator, (i, 1))[1]
     
 Base.IteratorSize(::Type{EntityPoolIterator}) = Base.HasLength()
 Base.IteratorEltype(::Type{EntityPoolIterator}) = Base.HasEltype()
