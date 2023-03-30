@@ -134,6 +134,7 @@ entity_data(c::Component) = c.data
 
 ##### BASE Extensions ####
 Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
+Base.@propagate_inbounds @inline Base.setindex!(c::Component, v, i::Integer) = c.data[i] = v 
 
 @inline function Base.getindex(c::Component, e::AbstractEntity)
     eid = Entity(e).id
@@ -252,6 +253,7 @@ entity_data(c::PooledComponent) = c.pool
 npools(c::PooledComponent) = length(c.data)
 
 Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, i::Integer) = c.data[c.pool[i]]
+Base.@propagate_inbounds @inline Base.setindex!(c::PooledComponent, v, i::Integer) = c.data[i] = v
 
 @inline function Base.getindex(c::PooledComponent, e::AbstractEntity)
     @boundscheck if !in(e, c)

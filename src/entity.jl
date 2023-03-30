@@ -121,8 +121,7 @@ end
 
 @generated function Base.setproperty!(e::EntityState{TT}, f::Symbol, val) where {TT}
     fn_to_DT = Dict{Symbol, DataType}()
-    ex = :(setfield!(e, f))
-    ex = Expr(:elseif, :(f === :id), :(return setfield!(getfield(e, :e), :id)::Int, val), ex)
+    ex = :(error("$(e.e) does not have a Component with field $f."))
     for PDT in TT.parameters
         DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
         for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
@@ -133,7 +132,7 @@ end
                 ex = MacroTools.postwalk(ex) do x
                     if @capture(x, setfield!(e[$DT_], $fnq, val))
                         return quote
-                            error("Field $f found in multiple components in $e.\nPlease use entity_state[$($DT)].$f instead.")
+                            error("Field $f found in multiple components in $e.\nPlease use <entitystate>[$($DT)].$f instead.")
                         end
                     else
                         return x
@@ -186,4 +185,4 @@ end
     state > length(i) && return nothing
     return @inbounds i.components[state][i.e], state + 1
 end
- 
+@inline Base.@propagate_inbounds Base.getindex(e::EntityState, i::Int) = e.components[i][e.e]
