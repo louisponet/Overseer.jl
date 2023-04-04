@@ -28,10 +28,6 @@ function Entity(m::AbstractLedger, datas...)
     return e
 end
 
-function entity(c::AbstractComponent, i::Integer)
-    return Entity(c.indices.packed[i])
-end
-
 function Entity(m::AbstractLedger, parent::Entity, datas...)
     e = Entity(m)
     for d in datas
@@ -186,3 +182,8 @@ end
     return @inbounds i.components[state][i.e], state + 1
 end
 @inline Base.@propagate_inbounds Base.getindex(e::EntityState, i::Int) = e.components[i][e.e]
+
+function entity(c::AbstractComponent, i::Integer)
+    return EntityState(Entity(c.indices.packed[i]), c)
+end
+
