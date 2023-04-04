@@ -21,7 +21,7 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
     
     @test c[Entity(2)] isa TestCompData
 
-    @test entity(c, 1) isa Entity
+    @test entity(c, 1) isa EntityState{Tuple{T{TestCompData}}}
     @test pop!(c, Entity(2)) == TestCompData(1)
     @test pop!(c) == EntityState(Entity(1), TestCompData(1))
     @test isempty(c)
