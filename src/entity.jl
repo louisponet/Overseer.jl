@@ -28,6 +28,17 @@ function Entity(m::AbstractLedger, datas...)
     return e
 end
 
+function entity(c::AbstractComponent, i::Integer)
+    return Entity(c.indices.packed[i])
+end
+
+"""
+    last_entity(c::AbstractComponent)
+
+Retrieves the last [`Entity`](@ref) in `c`.
+"""
+last_entity(c::AbstractComponent) = entity(c, length(c))
+
 function Entity(m::AbstractLedger, parent::Entity, datas...)
     e = Entity(m)
     for d in datas
@@ -117,7 +128,7 @@ end
 
 @generated function Base.setproperty!(e::EntityState{TT}, f::Symbol, val) where {TT}
     fn_to_DT = Dict{Symbol, DataType}()
-    ex = :(error("$(e.e) does not have a Component with field $f."))
+    ex = :(error("$e does not have a Component with field $f."))
     for PDT in TT.parameters
         DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
         for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))

@@ -38,7 +38,7 @@ include("ledger.jl")
 include("iteration.jl")
 
 
-export AbstractLedger, Ledger, System, Stage, Component, PooledComponent, Entity, entity
+export AbstractLedger, Ledger, System, Stage, Component, PooledComponent, Entity, entity, last_entity
 export @component, @pooled_component
 export @safe_entities_in, @entities_in, entity_pool, pools, pool
 
