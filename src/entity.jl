@@ -43,6 +43,8 @@ end
 
 Entity(e::Entity) = e
 
+Base.@propagate_inbounds Entity(c::AbstractComponent, i::Int) = Entity(c.indices.packed[i])
+
 Base.iterate(e::Entity, state=1) = state > 1 ? nothing : (e, state+1)
 
 const EMPTY_ENTITY = Entity(0)
@@ -184,7 +186,7 @@ end
 @inline Base.@propagate_inbounds Base.getindex(e::EntityState, i::Int) = e.components[i][e.e]
 
 function entity(c::AbstractComponent, i::Integer)
-    return EntityState(Entity(c.indices.packed[i]), c)
+    return EntityState(Entity(c, i), c)
 end
 
 """

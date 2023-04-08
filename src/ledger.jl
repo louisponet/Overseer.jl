@@ -85,7 +85,7 @@ function Base.empty!(m::AbstractLedger)
 end
 
 function Base.getindex(m::AbstractLedger, ::Type{T}) where {T}
-    return components(m)[T]::component_type(T)
+    return get!(components(m), T, component_type(T)())
 end
 
 Base.copy(m::AbstractLedger) = Ledger(copy(entities(m)),
@@ -142,9 +142,7 @@ end
 
 function ensure_component!(m::AbstractLedger, c::Type{T}) where {T}
     if !(c in m)
-        m_comps = components(m)
-        comp = component_type(c)()
-        m_comps[T] = comp
+        components(m)[T] = component_type(c)()
     end
 end
 

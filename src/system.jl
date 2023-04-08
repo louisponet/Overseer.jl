@@ -52,16 +52,16 @@ prepare(s::Stage, l::AbstractLedger) = prepare(s.steps, l)
 
 prepare(::System, ::AbstractLedger) = nothing
 
-function update(stage::Stage, l::AbstractLedger)
+function update(stage::Stage, l::AbstractLedger, args...)
     # Steps in a stage get executed in sequence, but if
     # a step is a vector they are threaded
     for step in stage.steps
         if step isa Vector
             Threads.@threads for t in step
-                update(t, l)
+                update(t, l, args...)
             end
         else
-            update(step, l)
+            update(step, l, args...)
         end
     end
 end
