@@ -77,7 +77,7 @@ function Base.show(io::IO, e::EntityState)
         end
     end
 end
-
+components(e::EntityState) = e.components
 Base.in(::Type{T}, e::EntityState{TT}) where {T, TT} = any(x->eltype(x) == T, TT.parameters)
 
 # TODO: Cleanup, can these two be merged?

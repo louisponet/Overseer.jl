@@ -275,18 +275,20 @@ Base.@propagate_inbounds @inline Base.parent(c::PooledComponent, e::Entity) = pa
 # set value of <only> this entity
 @inline function Base.setindex!(c::PooledComponent{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
-    @inbounds if in(e, c)
-        pid = c.indices[eid]
-        g = c.pool[pid]
-        if c.pool_size[g] == 1
-            # the entity already has its own (otherwise empty) pool - adjust value
-            c.data[g] = v
-        else
-            # the entity is part of a larger pool - create a new one
-            c.pool_size[g] -= 1
-            push!(c.data, v)
-            push!(c.pool_size, 1)
-            c.pool[pid] = length(c.data)
+    if in(e, c)
+        @inbounds begin
+            pid = c.indices[eid]
+            g = c.pool[pid]
+            if c.pool_size[g] == 1
+                # the entity already has its own (otherwise empty) pool - adjust value
+                c.data[g] = v
+            else
+                # the entity is part of a larger pool - create a new one
+                c.pool_size[g] -= 1
+                push!(c.data, v)
+                push!(c.pool_size, 1)
+                c.pool[pid] = length(c.data)
+            end
         end
     else
         # the entity is not in the component - add it

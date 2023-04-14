@@ -1,6 +1,7 @@
 # Overseer (Entity Component System)
 [![Build Status](https://github.com/louisponet/Overseer.jl/workflows/CI/badge.svg)](https://github.com/louisponet/Overseer.jl/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/gh/louisponet/Overseer.jl/branch/master/graph/badge.svg?token=mVK0aEQGuu)](https://codecov.io/gh/louisponet/Overseer.jl)
+[![Package Downloads](https://shields.io/endpoint?url=https://pkgs.genieframework.com/api/v1/badge/Overseer)](https://pkgs.genieframework.com?packages=Overseer)
 
 This package supplies a lightweight, performant and friction-free implementation of the [Entity component system](https://en.wikipedia.org/wiki/Entity_component_system)(ECS) paradigm. It has been used mostly in game development, however I think that it's concept, way of programming and thinking can be applied and used in more broad applications. It offers a very clean and flexible way to gradually build up an application in well separated blocks, while remaining very performant due to the way data is generally structured and used.
 
