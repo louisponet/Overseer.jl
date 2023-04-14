@@ -3,9 +3,14 @@
 [![codecov](https://codecov.io/gh/louisponet/Overseer.jl/branch/master/graph/badge.svg?token=mVK0aEQGuu)](https://codecov.io/gh/louisponet/Overseer.jl)
 [![Package Downloads](https://shields.io/endpoint?url=https://pkgs.genieframework.com/api/v1/badge/Overseer)](https://pkgs.genieframework.com?packages=Overseer)
 
-This package supplies a lightweight, performant and friction-free implementation of the [Entity component system](https://en.wikipedia.org/wiki/Entity_component_system)(ECS) paradigm. It has been used mostly in game development, however I think that it's concept, way of programming and thinking can be applied and used in more broad applications. It offers a very clean and flexible way to gradually build up an application in well separated blocks, while remaining very performant due to the way data is generally structured and used.
+This package supplies a lightweight, performant and julian implementation of the [Entity component system](https://en.wikipedia.org/wiki/Entity_component_system) (ECS) paradigm.
+It is most well known for its applications in game development, but IMHO its a programming paradigm that can benefit a broad range of applications.
+It results in a very clean and flexible way to gradually build up applications in well separated blocks, while remaining inherently performant due to the way data is structured and accessed.
 
-The API and performance of this package has been evolving as I used it during development of [Glimpse](https://github.com/louisponet/Glimpse.jl).
+The API and performance of this package are being thoroughly tested in practice in the development of:
+- [Glimpse.jl](https://github.com/louisponet/Glimpse.jl), a mid level rendering toolkit
+- [Trading.jl](https://github.com/louisponet/Trading.jl), a comprehensive realtime trading and backtesting framework
+- [RomeoDFT.jl](https://github.com/louisponet/RomeoDFT.jl), a robust global DFT based energy optimizer
 
 ## ECS Basics
 The main idea of an ECS is to have a very clear separation between data and logic, grouping data in logic-free `Components` and logic in data-free `Systems`. Systems will perform their logic on a set of Components they care about, usually iterating through all the entities that have a particular combination of the components, systems tend to not care about specific entities, only groups of them. This allows for ideal performance since data is accessed through iterating over packed arrays, while allowing a high degree of flexibility by attaching different components to entities on the fly. 
