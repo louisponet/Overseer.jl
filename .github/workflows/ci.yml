@@ -66,6 +66,6 @@ jobs:
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
-            using Trading
-            DocMeta.setdocmeta!(Trading, :DocTestSetup, :(using Trading); recursive=true)
-            doctest(Trading)'
+            using Overseer
+            DocMeta.setdocmeta!(Overseer, :DocTestSetup, :(using Overseer); recursive=true)
+            doctest(Overseer)'
