@@ -283,29 +283,36 @@ for (m, it_short, it) in zip((:entities_in, :safe_entities_in), (:indices_iterat
 end
 
 """
-    @entities_in
+    @entities_in(comp_expr)
+    @entities_in(l, comp_expr)
 
 This macro creates an iterator that iterates over all entities that are present
 in the components according to the expression passed to it. Each iteration an
 [`EntityState`](@ref) is returned that refers to the entity and the associated data
 inside the [`Components`](@ref).
 
+`comp_expr` is a boolean expression that is used to decide which entities to return.
 # Examples
-```jldoctest
+```julia
+for e in @entities_in(comp1 && (comp2 || comp3) && !comp4)
+    # do something with e
+end
 
+for e in @entities_in(ledger, CompType1 && (CompType2 || CompType3) && !CompType4)
+    # do something with e
+end
 ```
+Assuming that `comp1 = ledger[CompType1]` and similar for the others, these expressions will
+loop over the [`Entities`](@ref EntityState) that are in `comp1`, in `comp2` or `comp3`, and not in
+`comp4`.
 """
 :(@entities_in)
 
 """
-    @safe_entities_in
+    @safe_entities_in(comp_expr)
+    @safe_entities_in(ledger, comp_expr)
 
 Similar to [`@entities_in`](@ref) but safe to [`pop!`](@ref) entities during iteration.
-
-# Examples
-```jldoctest
-
-```
 """
 :(@safe_entities_in)
     
@@ -324,6 +331,21 @@ end
 indices_iterator(g::EntityPoolIterator) = g
 indices(g::EntityPoolIterator) = g
 
+"""
+    entity_pool(c::PooledComponent, pool_id::Int)
+    entity_pool(c::PooledComponent, e::AbstractEntity)
+
+Returns an iterator that iterates over all the [`Entities`](@ref EntityState) in the pool
+with `id == pool_id` or the pool to which `e` belongs.
+
+# Example
+
+```julia
+for e in entity_pool(c, 1)
+    # do something with e belonging to the first pool of c
+end
+```
+"""
 function entity_pool(c::PooledComponent, pool_id::Int)
     @boundscheck if length(c.data) < pool_id
         throw(BoundsError(c, pool_id))
@@ -339,7 +361,7 @@ entity_pool(c::PooledComponent, e::AbstractEntity) = entity_pool(c, pool(c, e))
     state[2] > i.c.pool_size[i.pool_id] && return nothing
     n = findnext(isequal(i.pool_id), i.c.pool, state[1])
     n === nothing && return n
-    return Entity(i.c.indices.packed[n]), (n + 1, state[2] + 1)
+    return EntityState(Entity(i.c.indices.packed[n]), i.c), (n + 1, state[2] + 1)
 end
 
 Base.getindex(iterator::EntityPoolIterator, i::Int) = iterate(iterator, (i, 1))[1]
@@ -378,8 +400,22 @@ struct PoolsIterator{T}
     c::PooledComponent{T}
 end
 
-pools(c::PooledComponent) = PoolsIterator(c)
+"""
+    pools(c::PooledComponent)
 
+Returns an iterator that loops over the pools in `c`, returning a `Tuple`
+with the data and an iterator like the one gotten from [`entity_pool`](@ref).
+
+# Example
+```julia
+for (data, entities) in pools(c)
+    for e in entities
+        # do something with e
+    end
+end
+```
+"""
+pools(c::PooledComponent) = PoolsIterator(c)
 
 function Base.iterate(i::PoolsIterator, p = 1)
     p > length(i.c.data) && return nothing

@@ -1,8 +1,33 @@
 """
     Ledger
 
-A `Ledger` holds all the [`Entities`](@ref Entity), [`Components`](@ref) and [`Systems`](@ref). It has interfaces to create new [`Entities`](@ref Entity) and access the [`Components`](ref). Calling [`update(ledger)`](@ref Overseer.update) will call
+A `Ledger` holds all the [`Entities`](@ref Entity), [Components](@ref) and [Systems](@ref).
+It has interfaces to create new [`Entities`](@ref Entity) and access the [Components](ref).
+Calling [`update(ledger)`](@ref Overseer.update) will call
 all the [`update`](@ref) functions of the systems in the `Ledger`.
+
+# Example
+```julia
+l = Ledger()
+e1 = Entity(l, CompType1(1, 2))
+e2 = Entity(l, CompType1(1, 2), CompType2("comptype2"))
+```
+this has created a new [`Ledger`](@ref) with two [`Entities`](@ref Entity), the first having 1 component of type `CompType1`,
+the second has 2 components.
+
+```julia
+l[e1]
+```
+Will return an [`EntityState`](@ref), essentially a bag of [`Components`](@ref AbstractComponent) `e1` belongs to.
+```julia
+l[CompType1]
+```
+returns the [`AbstractComponent`](@ref) holding the data of type `CompType1`.
+
+For further info on interactions with a [`Ledger`](@ref), see:
+- [`in`](@ref)
+- [`delete!`](@ref)
+- [`setindex!`](@ref)
 """
 mutable struct Ledger <: AbstractLedger
     entities     ::Vector{Entity}
@@ -71,8 +96,13 @@ function Base.show(io::IO, ::MIME"text/plain", l::AbstractLedger)
     end
     println(io, "Total entities: $(length(entities(l)) - length(free_entities(l)))")
 end
+
 function Base.in(::Type{R}, m::AbstractLedger) where {R}
     return R ∈ keys(components(m))
+end
+function Base.in(e::AbstractEntity, m::AbstractLedger)
+    es = entities(m)
+    return length(es) >= Entity(e).id && es[Entity(e).id] != EMPTY_ENTITY
 end
 
 function Base.empty!(m::AbstractLedger)
@@ -223,11 +253,6 @@ function components(ledger::AbstractLedger, ::Type{T}) where {T}
         end
     end
     return comps
-end
-
-function Base.in(e::AbstractEntity, m::AbstractLedger)
-    es = entities(m)
-    return length(es) >= Entity(e).id && es[Entity(e).id] != EMPTY_ENTITY
 end
 
 function entity_assert(m::AbstractLedger, e::AbstractEntity)
