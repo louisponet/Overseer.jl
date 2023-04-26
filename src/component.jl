@@ -5,12 +5,20 @@ struct TestCompData
 end
 
 # AbstractComponent Interface
+"""
+Tests whether an [`AbstractComponent`](@ref) satisfies the interface.
+"""
 function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent}
     c = T{TestCompData}()
 
     @test eltype(c) <: TestCompData
-    @test c.indices isa Indices
-    
+    if hasfield(T, :indices)
+        @test c.indices isa Indices
+    else
+        @test indices_iterator(c) isa IndicesIterator
+        @test reverse_indices_iterator(c) isa ReverseIndicesIterator
+    end
+
     @test isempty(c)
     @test length(c) == 0
     c[Entity(1)] = TestCompData(1)
@@ -18,14 +26,14 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
     @test Entity(2) in c
     @test length(c) == 2 == size(c)[1] == length(c.indices) == length(entity_data(c))
 
-    
+
     @test c[Entity(2)] isa TestCompData
 
     @test entity(c, 1) isa EntityState{Tuple{T{TestCompData}}}
     @test pop!(c, Entity(2)) == TestCompData(1)
     @test pop!(c) == EntityState(Entity(1), TestCompData(1))
     @test isempty(c)
-    
+
     c[Entity(1)] = TestCompData(1)
     c[Entity(2)] = TestCompData(2)
 
@@ -33,11 +41,11 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
     entity_data(c)[1], entity_data(c)[2] = entity_data(c)[2], entity_data(c)[1]
     @test c[Entity(2)] == TestCompData(1)
     @test c[Entity(1)] == TestCompData(2)
-    
+
     c[Entity(1)], c[Entity(2)] = c[Entity(2)], c[Entity(1)]
     @test c[Entity(1)] == TestCompData(1)
     @test c[Entity(2)] == TestCompData(2)
-    
+
     @test iterate(c)[1] isa TestCompData
     empty!(c)
     @test isempty(c)
@@ -48,19 +56,24 @@ end
 
 Function that can be overloaded to specify what the default [`AbstractComponent`](@ref) of a given type is. This is mainly used in the various component macros.
 """
-component_type(::Type{TC}) where{TC} = Component{TC}
- 
+component_type(::Type{TC}) where {TC} = Component{TC}
+
 @inline indices_iterator(a::AbstractComponent)::Indices = a.indices
 @inline reverse_indices_iterator(a::AbstractComponent) = ReverseIndicesIterator(a.indices, i -> true)
 
-Base.in(i::Integer,        c::AbstractComponent)  = in(i, c.indices)
-Base.in(e::AbstractEntity, c::AbstractComponent)  = in(Entity(e).id, c)
+"""
+    in(entity, component)
 
-Base.length(c::AbstractComponent)  = length(c.indices)
-Base.size(c::AbstractComponent)    = size(c.indices)
+Checks whether `entity` has a data entry in `component`.
+"""
+Base.in(i::Integer, c::AbstractComponent) = in(i, c.indices)
+Base.in(e::AbstractEntity, c::AbstractComponent) = in(Entity(e).id, c)
+
+Base.length(c::AbstractComponent) = length(c.indices)
+Base.size(c::AbstractComponent) = size(c.indices)
 Base.isempty(c::AbstractComponent) = isempty(c.indices)
 
-Base.eltype(::Type{<:AbstractComponent{T}}) where T = T
+Base.eltype(::Type{<:AbstractComponent{T}}) where {T} = T
 
 function Base.delete!(c::AbstractComponent, es::Vector{Entity})
     for e in es
@@ -99,12 +112,12 @@ function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:Integer})
     return c
 end
 
-Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:AbstractEntity}) = permute!(c, map(x->c.indices[x.id], permvec))
+Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:AbstractEntity}) = permute!(c, map(x -> c.indices[x.id], permvec))
 
 Base.sortperm(c::AbstractComponent, args...; kwargs...) = sortperm(entity_data(c), args...; kwargs...)
 
-function Base.:(==)(c1::C1, c2::C2) where {C1 <: AbstractComponent, C2 <: AbstractComponent}
-    if eltype(C1) != eltype(C2) ||length(c1) != length(c2)
+function Base.:(==)(c1::C1, c2::C2) where {C1<:AbstractComponent,C2<:AbstractComponent}
+    if eltype(C1) != eltype(C2) || length(c1) != length(c2)
         return false
     elseif length(c1) > 20 && hash(c1) != hash(c2)
         return false
@@ -117,15 +130,19 @@ Base.IndexStyle(::Type{AbstractComponent}) = IndexLinear()
 
 
 """
+    Component
+    
 The most basic Component type.
 
 Indexing into a component with an [`Entity`](@ref) will return the data linked to that entity,
 indexing with a regular `Int` will return directly the data that is stored in the data
 vector at that index, i.e. generally not the storage linked to the [`Entity`](@ref) with that `Int` as id.
+
+To register a `struct` to be stored in a [`Component`](@ref) see [`@component`](@ref).
 """
 mutable struct Component{T} <: AbstractComponent{T}
     indices::Indices
-    data   ::Vector{T}
+    data::Vector{T}
 end
 
 Component{T}() where {T} = Component(Indices(), T[])
@@ -134,7 +151,7 @@ entity_data(c::Component) = c.data
 
 ##### BASE Extensions ####
 Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
-Base.@propagate_inbounds @inline Base.setindex!(c::Component, v, i::Integer) = c.data[i] = v 
+Base.@propagate_inbounds @inline Base.setindex!(c::Component, v, i::Integer) = c.data[i] = v
 
 @inline function Base.getindex(c::Component, e::AbstractEntity)
     eid = Entity(e).id
@@ -161,6 +178,11 @@ function Base.empty!(c::Component)
     return c
 end
 
+"""
+    pop!(component, entity)
+
+pops the data for `entity` out of `component`.
+"""
 function Base.pop!(c::Component, e::AbstractEntity)
     @boundscheck if !in(e, c)
         throw(BoundsError(c, Entity(e)))
@@ -171,7 +193,7 @@ function Base.pop!(c::Component, e::AbstractEntity)
         c.data[id] = c.data[end]
         pop!(c.data)
         pop!(c.indices, e.id)
-        return v 
+        return v
     end
 end
 
@@ -186,9 +208,9 @@ end
 
 @inline Base.iterate(c::Component, args...) = iterate(c.data, args...)
 
-@inline function Base.hash(c::C, h::UInt) where {C <: AbstractComponent}
+@inline function Base.hash(c::C, h::UInt) where {C<:AbstractComponent}
     for f in nfields(c)
-        h = hash(getfield(c,f), h)
+        h = hash(getfield(c, f), h)
     end
     return h
 end
@@ -201,7 +223,11 @@ end
 function process_typedef(typedef, mod)
     global td = nothing
     MacroTools.postwalk(typedef) do x
-        if @capture(x, struct T_ fields__ end | mutable struct T_ fields__ end)
+        if @capture(x, struct T_
+            fields__
+        end | mutable struct T_
+            fields__
+        end)
             global td = T
         end
         x
@@ -212,10 +238,10 @@ end
 """
     @component
 
-This takes a struct definition and 
+This takes a struct definition and register it so that it will be stored inside a [`Component`](@ref) when attached to [Entities](@ref).
 """
 macro component(typedef)
-	return esc(Overseer._component(typedef, __module__))
+    return esc(Overseer._component(typedef, __module__))
 end
 function _component(typedef, mod)
     tn = process_typedef(typedef, mod)
@@ -237,6 +263,31 @@ end
 
 Base.parent(e::Entity) = ApplyToPool(e)
 
+"""
+    PooledComponent
+
+A [`PooledComponent`](@ref) allows for sharing data between many [Entities](@ref).
+Essentially, the indices into the data pool are stored for each [`Entity`](@ref), rather than the data itself.
+
+To make a `struct` to be stored inside [`PooledComponent`](@ref) see [`@pooled_component`](@ref).
+
+[`make_unique!`](@ref) can be used to check whether duplicate data exists and if so point all [Entities](@ref) to only
+a single copy and remove the duplicates.
+
+To interact with the data pools see [`pool`](@ref), [`pools`](@ref) and [`entity_pool`](@ref).
+
+# Example
+```julia
+@pooled_component struct Comp1
+    comp1
+end
+
+e1 = Entity(ledger, Comp1(1))
+e2 = Entity(ledger)
+
+ledger[Comp1][e2] = e1 # The Comp1 data for e2 is set to point to the same as e1 
+```
+"""
 mutable struct PooledComponent{T} <: AbstractComponent{T}
     indices::Indices
     pool::Vector{Int}
@@ -245,6 +296,13 @@ mutable struct PooledComponent{T} <: AbstractComponent{T}
 end
 
 PooledComponent{T}() where {T} = PooledComponent{T}(Indices(), Int[], Int[], T[])
+
+"""
+    pool(pooled_compnent, entity)
+    pool(pooled_compnent, i)
+    
+Returns which pool `entity` or the `ith` entity belongs to.
+"""
 Base.@propagate_inbounds @inline pool(c::PooledComponent, e::AbstractEntity) = c.pool[c.indices[e.id]]
 Base.@propagate_inbounds @inline pool(c::PooledComponent, e::Int) = c.pool[c.indices[e]]
 
@@ -269,7 +327,7 @@ Base.@propagate_inbounds @inline function Base.parent(c::PooledComponent, i::Int
     return @inbounds Entity(c.indices.packed[findfirst(isequal(i), c.pool)])
 end
 Base.@propagate_inbounds @inline Base.parent(c::PooledComponent, e::Entity) = parent(c, pool(c, e))
-    
+
 
 # c[entity] = value
 # set value of <only> this entity
@@ -293,7 +351,7 @@ Base.@propagate_inbounds @inline Base.parent(c::PooledComponent, e::Entity) = pa
     else
         # the entity is not in the component - add it
         push!(c.indices, eid)
-        push!(c.pool, length(c.data)+1)
+        push!(c.pool, length(c.data) + 1)
         push!(c.pool_size, 1)
         push!(c.data, v)
     end
@@ -408,18 +466,30 @@ end
 
 Base.sortperm(c::PooledComponent) = sortperm(c.pool)
 
+"""
+    @pooled_component
+
+This takes a struct definition and register it so that it will be stored inside a [`PooledComponent`](@ref) when attached to [Entities](@ref).
+"""
 macro pooled_component(typedef)
     return esc(Overseer._pooled_component(typedef, __module__))
 end
 
 function _pooled_component(typedef, mod)
-    tn = process_typedef(typedef, mod) 
+    tn = process_typedef(typedef, mod)
     return quote
         Base.@__doc__($typedef)
         Overseer.component_type(::Type{T}) where {T<:$tn} = Overseer.PooledComponent{T}
     end
 end
 
+"""
+    make_unique!
+
+
+Checks whether duplicate data exists in a [`PooledComponent`](@ref) and if so points all [Entities](@ref) to only
+a single copy while removing the duplicates.
+"""
 function make_unique!(c::PooledComponent)
     @inbounds begin
         # Go through all pools and check if a later pool has the same value.

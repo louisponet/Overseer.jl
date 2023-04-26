@@ -1,4 +1,9 @@
-update(::S, l::AbstractLedger) where {S<:System}= error("No update method implemented for $S")
+"""
+    update(system, ledger, args...)
+
+Function to be overloaded for any [`System`](@ref) which will be called during the `update` call stack.
+"""
+update(::S, l::AbstractLedger, args...) where {S<:System}= error("No update method implemented for $S")
 
 """
     requested_components(::System)
@@ -8,22 +13,36 @@ a system, the right [`AbstractComponents`](@ref AbstractComponent) will be
 added to it.
 
 # Examples
-```jldoctest
-julia> @component struct ExampleComp end
+```julia
+@component struct ExampleComp end
 
-julia> struct ExampleSystem <: System end
+struct ExampleSystem <: System end
 
-julia> Overseer.requested_components(::ExampleSystem) = (ExampleComp,)
+Overseer.requested_components(::ExampleSystem) = (ExampleComp,)
 
-julia> l = Ledger(Stage(:example, [ExampleSystem()]))
-Ledger
-Components:
-        0-element Component{ExampleComp}
-        Total entities: 0
+l = Ledger(Stage(:example, [ExampleSystem()]))
 ```
 """
 requested_components(::System) = ()
 
+"""
+    Stage
+
+Represents a set of [`Systems`](@ref System) that get executed as steps by calling `update` on those systems.
+The steps are a `Vector` of other `Stages`, `Systems`, or a `Vector` of those.
+During the [`update`](@ref update(::Stage, ::AbstractLedger)) call on a `Stage`, if one of the steps is found to be a `Vector` it will be assumed
+that those can be executed at the same time (see the example). The representation of the steps can be thought of as
+a very crude `DAG`.
+
+# Example
+
+```julia
+Stage(:example_stage, [Sys1, [Sys2, Sys3, Sys4], Sys5])
+```
+When `update` is called on this stage, first the [`update`](@ref update(::System, ::AbstractLedger)) of `Sys1` will be called, then
+3 tasks will be spawned each calling `update` for `Sys2`, `Sys3` and `Sys4` at the same time. Finally after those complete the
+`update` function of `Sys5` will be called.
+"""
 struct Stage
     name::Symbol
     steps::Vector{Union{System, Stage, Vector}} 
@@ -52,6 +71,12 @@ prepare(s::Stage, l::AbstractLedger) = prepare(s.steps, l)
 
 prepare(::System, ::AbstractLedger) = nothing
 
+"""
+    update(stage, ledger, args...)
+
+recursively calls `update` with the `ledger` on the steps defined in the `stage`.
+See the [`Stage`](@ref) documentation for an explanation of the execution graph.
+"""
 function update(stage::Stage, l::AbstractLedger, args...)
     # Steps in a stage get executed in sequence, but if
     # a step is a vector they are threaded

@@ -2,7 +2,7 @@
     Ledger
 
 A `Ledger` holds all the [`Entities`](@ref Entity), [Components](@ref) and [Systems](@ref).
-It has interfaces to create new [`Entities`](@ref Entity) and access the [Components](ref).
+It has interfaces to create new [`Entities`](@ref Entity) and access the [Components](@ref).
 Calling [`update(ledger)`](@ref Overseer.update) will call
 all the [`update`](@ref) functions of the systems in the `Ledger`.
 
@@ -23,11 +23,6 @@ Will return an [`EntityState`](@ref), essentially a bag of [`Components`](@ref A
 l[CompType1]
 ```
 returns the [`AbstractComponent`](@ref) holding the data of type `CompType1`.
-
-For further info on interactions with a [`Ledger`](@ref), see:
-- [`in`](@ref)
-- [`delete!`](@ref)
-- [`setindex!`](@ref)
 """
 mutable struct Ledger <: AbstractLedger
     entities     ::Vector{Entity}
@@ -69,6 +64,23 @@ function Ledger(stages::Stage...)
     return m
 end
 
+"""
+    ledger(l::AbstractLedger)
+
+Returns the underlying standard [`Ledger`](@ref).
+This is the preferred method to create new [`AbstractLedgers`](@ref AbstractLedger).
+
+# Example
+```julia
+struct MyLedger <: AbstractLedger
+    base_ledger::Ledger
+    # other fields
+end
+
+Overseer.ledger(m::MyLedger) = m.base_ledger
+# Now you can use MyLedger identically to the standard Ledger
+```
+"""
 ledger(m::Ledger) = m
 
 components(m::AbstractLedger)       = ledger(m).components
@@ -213,6 +225,12 @@ function Base.insert!(m::AbstractLedger, s::Symbol, i::Int, sys::System)
     prepare(sys, m)
 end
 
+"""
+    delete!(ledger, entity)
+
+Immediately removes the data of an [Entity](@ref Entities) from all components, after which
+the entity itself is removed from the [`Ledger`](@ref).
+"""
 function Base.delete!(m::AbstractLedger, e::AbstractEntity)
     entity_assert(m, e)
     push!(free_entities(m), e)
@@ -259,6 +277,13 @@ function entity_assert(m::AbstractLedger, e::AbstractEntity)
     @assert e in m "$(Entity(e)) does not exist, either never initiated or removed previously."
 end
 
+"""
+    schedule_delete!(ledger, entity)
+
+Schedules an [Entity](@ref Entities) to be deleted with [`delete_scheduled!`](@ref). This can
+be useful when wanting to delete entities during iteration which does not guarantee that
+all entities would be visited when using standard [`delete!`](@ref).
+"""
 function schedule_delete!(m::AbstractLedger, e::Entity)
     entity_assert(m, e)
     push!(to_delete(m), e)
@@ -269,6 +294,11 @@ function schedule_delete!(m::AbstractLedger, e::EntityState)
     push!(to_delete(m), e.e)
 end
 
+"""
+    delete_scheduled!(ledger)
+
+Deletes all the [Entities](@ref) that were previously scheduled for deletion with [`schedule_delete!`](@ref).
+"""
 function delete_scheduled!(m::AbstractLedger)
     for c in values(components(m))
         delete!(c, to_delete(m))
@@ -280,6 +310,11 @@ function delete_scheduled!(m::AbstractLedger)
     empty!(to_delete(m))
 end
 
+"""
+    update(ledger)
+
+Updates sequentially all [`Stages`](@ref Stage) that are in the `ledger`.
+"""
 function update(m::AbstractLedger)
     for stage in stages(m)
         update(stage, m)

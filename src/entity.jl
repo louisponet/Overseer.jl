@@ -4,6 +4,24 @@
 #                                      #
 ########################################
 
+"""
+    Entity
+
+Can be thought of as simply an index to retrieve data associated with the [`Entity`](@ref) from [Components](@ref) or a [`Ledger`](@ref).
+In the case of a [`Ledger`](@ref) it will return an [`EntityState`](@ref) that holds references to all the [Components](@ref) for which the
+[`Entity`](@ref) has data.
+
+An [`Entity`](@ref) should always first be created from an [`AbstractLedger`](@ref) by using `Entity(ledger, comps...)` before it is used. 
+
+# Example
+```julia
+e = Entity(ledger, Comp1(), Comp2())
+ledger[e] # EntityState with references to easily retrieve e's data for Comp1 and Comp2
+
+ledger[Comp2][e] # access the Comp2 data of e
+ledger[e][Comp2] # identical to above
+```
+"""
 struct Entity <: AbstractEntity
     id::Int
 end
@@ -57,6 +75,44 @@ Base.:(==)(e1::AbstractEntity, e2::AbstractEntity) = e1.id == e2.id
 #                                      #
 ########################################
 
+"""
+    EntityState
+
+Combination of an [`Entity`](@ref) and a bunch of [Components](@ref) for which the [`Entity`](@ref) has data.
+It can thus be used as an index similar to a standard [`Entity`](@ref), but it also provides some nice ways to
+retrieve the data associated with it in the [Components](@ref).
+
+# Example
+
+```julia
+@component struct Comp1
+    comp1
+end
+
+@component mutable struct Comp2
+    comp2
+end
+
+@component struct Comp3
+    comp3
+end    
+
+
+for e in @entities_in(ledger, Comp1 && Comp2)
+    # e is an EntityState
+    # we can directly access the fields of Comp1 and Comp2 since they have unique names,
+    # and assign a Comp3 to the Entity that's represented by the EntityState
+    
+    ledger[Comp3][e] = Comp3(e.comp1 + e.comp2)
+    # If there are components that have the same name in the EntityState you can access them directly
+    e[Comp1].comp1
+    e[Comp2].comp2
+
+    # If the Components are mutable we can also set their fields using
+    e.comp2 = 3
+end
+```
+"""
 struct EntityState{TT<:Tuple} <: AbstractEntity
     e::Entity
     components::TT
@@ -185,6 +241,11 @@ end
 end
 @inline Base.@propagate_inbounds Base.getindex(e::EntityState, i::Int) = e.components[i][e.e]
 
+"""
+    entity(c, i)
+
+Return the [`EntityState`](@ref) with the `i`th [`Entity`](@ref) and data in [Component](@ref Components) `c`.
+"""
 function entity(c::AbstractComponent, i::Integer)
     return EntityState(Entity(c, i), c)
 end

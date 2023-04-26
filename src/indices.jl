@@ -4,10 +4,24 @@ const INT_PER_PAGE_1 = INT_PER_PAGE - 1
 # we use this to mark pages not in use, it must never be written to.
 const NULL_INT_PAGE = Vector{Int}()
 
-const Page = NamedTuple{(:id, :offset), Tuple{Int, Int}}
+const Page = NamedTuple{(:id, :offset),Tuple{Int,Int}}
 
+"""
+    Indices
+
+A variation on the [SparseIntSet](https://juliacollections.github.io/DataStructures.jl/stable/sparse_int_set/#DataStructures.SparseIntSet-1)
+from [DataStructures.jl](https://juliacollections.github.io/DataStructures.jl/stable/) which forms the backbone of keeping track of which [Entities](@ref) are part
+of an [`AbstractComponent`](@ref) and how to access their data.
+
+Complexities:
+- `in`: O(1)
+- `pop!`: O(1)
+- `push!`: O(1)
+- `getindex`: O(1)
+- `iterate`: O(N)
+"""
 mutable struct Indices
-    packed ::Vector{Int}
+    packed::Vector{Int}
     reverse::Vector{Vector{Int}}
     counters::Vector{Int}  # counts the number of real elements in each page of reverse.
 end
@@ -50,13 +64,13 @@ end
 Base.lastindex(s::Indices) = s.packed[end]
 
 @inline function pageid_offset(i)
-    if INT_PER_PAGE & (INT_PER_PAGE - 1) === 0   
+    if INT_PER_PAGE & (INT_PER_PAGE - 1) === 0
         t1 = i - 1
         pageid = div(t1, INT_PER_PAGE)
         t2 = t1 & INT_PER_PAGE_1
         return (id = pageid + 1, offset = t2 + 1)
     else
-        return NamedTuple{(:id, :offset)}(divrem(i - 1, INT_PER_PAGE) .+ 1 )
+        return NamedTuple{(:id, :offset)}(divrem(i - 1, INT_PER_PAGE) .+ 1)
     end
 end
 
@@ -72,7 +86,7 @@ end
 end
 
 Base.length(s::Indices) = length(s.packed)
-Base.size(s::Indices)   = (length(s.packed),)
+Base.size(s::Indices) = (length(s.packed),)
 
 Base.@propagate_inbounds @inline function Base.getindex(s::Indices, p::Page)
     id, offset = p
@@ -84,14 +98,17 @@ Base.@propagate_inbounds @inline function Base.getindex(s::Indices, p::Page)
     @boundscheck if page === NULL_INT_PAGE
         throw(BoundsError(s, p))
     end
+
     i = @inbounds page[offset]
     @boundscheck if i === 0
         throw(BoundsError(s, p))
     end
-    return i 
+    return i
 end
 
-Base.@propagate_inbounds @inline Base.getindex(s::Indices, i::Integer) = getindex(s, pageid_offset(i))
+Base.@propagate_inbounds @inline function Base.getindex(s::Indices, i::Integer)
+    return getindex(s, pageid_offset(i))
+end
 
 @inline function Base.push!(s::Indices, i::Integer)
     i <= 0 && throw(DomainError("Only positive Ints allowed."))
@@ -104,7 +121,7 @@ Base.@propagate_inbounds @inline Base.getindex(s::Indices, i::Integer) = getinde
         # Create new null pages up to pageid and fresh (zero-filled) one at pageid
         sizehint!(pages, pageid)
         sizehint!(s.counters, pageid)
-        for i in 1:pageid - plen - 1
+        for i in 1:pageid-plen-1
             push!(pages, NULL_INT_PAGE)
             push!(s.counters, 0)
         end
@@ -179,7 +196,10 @@ Base.popfirst!(s::Indices) = pop!(s, first(s))
 
 @inline Base.iterate(set::Indices, args...) = iterate(set.packed, args...)
 
-Base.last(s::Indices) = isempty(s) ? throw(ArgumentError("Empty set has no last element.")) : last(s.packed)
+function Base.last(s::Indices)
+    return isempty(s) ? throw(ArgumentError("Empty set has no last element.")) :
+           last(s.packed)
+end
 
 Base.union(s::Indices, ns...) = union!(copy(s), ns...)
 function Base.union!(s::Indices, ns...)
@@ -228,7 +248,7 @@ end
 
 issubset(a::Indices, b::Indices) = isequal(a, intersect(a, b))
 
-Base.:(<)(a::Indices, b::Indices) = ( a<=b ) && !isequal(a, b)
+Base.:(<)(a::Indices, b::Indices) = (a <= b) && !isequal(a, b)
 Base.:(<=)(a::Indices, b::Indices) = issubset(a, b)
 
 function findfirst_packed_id(i, s::Indices)

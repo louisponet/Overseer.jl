@@ -289,7 +289,7 @@ end
 This macro creates an iterator that iterates over all entities that are present
 in the components according to the expression passed to it. Each iteration an
 [`EntityState`](@ref) is returned that refers to the entity and the associated data
-inside the [`Components`](@ref).
+inside the [Components](@ref).
 
 `comp_expr` is a boolean expression that is used to decide which entities to return.
 # Examples
@@ -303,7 +303,7 @@ for e in @entities_in(ledger, CompType1 && (CompType2 || CompType3) && !CompType
 end
 ```
 Assuming that `comp1 = ledger[CompType1]` and similar for the others, these expressions will
-loop over the [`Entities`](@ref EntityState) that are in `comp1`, in `comp2` or `comp3`, and not in
+loop over the [Entities](@ref) that are in `comp1`, in `comp2` or `comp3`, and not in
 `comp4`.
 """
 :(@entities_in)

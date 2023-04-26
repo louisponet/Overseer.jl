@@ -1,5 +1,4 @@
 # Entities
-
 ```@meta
 CurrentModule = Overseer
 ```
@@ -7,4 +6,6 @@ CurrentModule = Overseer
 ```@docs
 Entity
 EntityState
+entity
+last_entity
 ```
