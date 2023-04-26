@@ -1,6 +1,8 @@
 # Overseer (Entity Component System)
 [![Build Status](https://github.com/louisponet/Overseer.jl/workflows/CI/badge.svg)](https://github.com/louisponet/Overseer.jl/actions?query=workflow%3ACI)
 [![codecov](https://codecov.io/gh/louisponet/Overseer.jl/branch/master/graph/badge.svg?token=mVK0aEQGuu)](https://codecov.io/gh/louisponet/Overseer.jl)
+[![](https://img.shields.io/badge/docs-stable-blue.svg)](https://louisponet.github.io/Overseer.jl/stable)
+[![](https://img.shields.io/badge/docs-latest-blue.svg)](https://louisponet.github.io/Overseer.jl/dev)
 [![Package Downloads](https://shields.io/endpoint?url=https://pkgs.genieframework.com/api/v1/badge/Overseer)](https://pkgs.genieframework.com?packages=Overseer&startdate=2015-12-30&enddate=2040-12-31)
 
 This package supplies a lightweight, performant and julian implementation of the [Entity component system](https://en.wikipedia.org/wiki/Entity_component_system) (ECS) paradigm.
@@ -167,7 +169,7 @@ Entities can be removed from a specific component through
 pop!(m[Spring], e2)
 ```
 
-For more examples please have a look for now in [Glimpse.jl](https://github.com/louisponet/Glimpse.jl). 
+For more examples please have a look for now at the [Documentation](https://louisponet.github.io/Overseer.jl/stable/).
 
 ## Implementation
-The implementation is heavily inspired by [EnTT](https://github.com/skypjack/entt), using slightly modified [SparseIntSets](https://juliacollections.github.io/DataStructures.jl/latest/sparse_int_set/#DataStructures.SparseIntSet-1) to track which entities hold which components.
+The implementation was originally inspired by [EnTT](https://github.com/skypjack/entt), using slightly modified [SparseIntSets](https://juliacollections.github.io/DataStructures.jl/latest/sparse_int_set/#DataStructures.SparseIntSet-1) to track which entities hold which components.

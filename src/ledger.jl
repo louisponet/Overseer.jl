@@ -1,6 +1,4 @@
 """
-    Ledger
-
 A `Ledger` holds all the [`Entities`](@ref Entity), [Components](@ref) and [Systems](@ref).
 It has interfaces to create new [`Entities`](@ref Entity) and access the [Components](@ref).
 Calling [`update(ledger)`](@ref Overseer.update) will call

@@ -165,12 +165,12 @@ for i=1:10
                 )
 end
 
-t2 = group(m, Test1, Test2)
-t1 = group(m, Test1, Test2, Test3)
+t2 = Overseer.group(m, Test1, Test2)
+t1 = Overseer.group(m, Test1, Test2, Test3)
 
-@test_throws ArgumentError group(m, Test1, Test3)
+@test_throws ArgumentError Overseer.group(m, Test1, Test3)
 
-@test length(groups(m)) == 1
+@test length(Overseer.groups(m)) == 1
 @test t1.child == t2
 @test t1.child.parent == t1 == t2.parent
 

@@ -7,8 +7,6 @@ const NULL_INT_PAGE = Vector{Int}()
 const Page = NamedTuple{(:id, :offset),Tuple{Int,Int}}
 
 """
-    Indices
-
 A variation on the [SparseIntSet](https://juliacollections.github.io/DataStructures.jl/stable/sparse_int_set/#DataStructures.SparseIntSet-1)
 from [DataStructures.jl](https://juliacollections.github.io/DataStructures.jl/stable/) which forms the backbone of keeping track of which [Entities](@ref) are part
 of an [`AbstractComponent`](@ref) and how to access their data.

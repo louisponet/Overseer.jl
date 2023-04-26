@@ -5,8 +5,6 @@
 ########################################
 
 """
-    Entity
-
 Can be thought of as simply an index to retrieve data associated with the [`Entity`](@ref) from [Components](@ref) or a [`Ledger`](@ref).
 In the case of a [`Ledger`](@ref) it will return an [`EntityState`](@ref) that holds references to all the [Components](@ref) for which the
 [`Entity`](@ref) has data.
@@ -63,7 +61,7 @@ Entity(e::Entity) = e
 
 Base.@propagate_inbounds Entity(c::AbstractComponent, i::Int) = Entity(c.indices.packed[i])
 
-Base.iterate(e::Entity, state=1) = state > 1 ? nothing : (e, state+1)
+Base.iterate(e::Entity, state = 1) = state > 1 ? nothing : (e, state + 1)
 
 const EMPTY_ENTITY = Entity(0)
 
@@ -76,8 +74,6 @@ Base.:(==)(e1::AbstractEntity, e2::AbstractEntity) = e1.id == e2.id
 ########################################
 
 """
-    EntityState
-
 Combination of an [`Entity`](@ref) and a bunch of [Components](@ref) for which the [`Entity`](@ref) has data.
 It can thus be used as an index similar to a standard [`Entity`](@ref), but it also provides some nice ways to
 retrieve the data associated with it in the [Components](@ref).
@@ -120,7 +116,9 @@ end
 EntityState(e::Entity, comps...) = EntityState(e, comps)
 
 Entity(e::EntityState) = e.e
+
 Base.convert(::Type{Entity}, e::EntityState) = Entity(e)
+
 function Base.show(io::IO, e::EntityState)
     println(io, "$(typeof(e)):")
     println(io, "$(e.e)")
@@ -133,17 +131,19 @@ function Base.show(io::IO, e::EntityState)
         end
     end
 end
+
 components(e::EntityState) = e.components
-Base.in(::Type{T}, e::EntityState{TT}) where {T, TT} = any(x->eltype(x) == T, TT.parameters)
+
+Base.in(::Type{T}, e::EntityState{TT}) where {T,TT} = any(x -> eltype(x) == T, TT.parameters)
 
 # TODO: Cleanup, can these two be merged?
 @generated function Base.getproperty(e::EntityState{TT}, f::Symbol) where {TT}
-    fn_to_DT = Dict{Symbol, DataType}()
+    fn_to_DT = Dict{Symbol,DataType}()
     ex = :(getfield(e, f))
     ex = Expr(:elseif, :(f === :id), :(return getfield(getfield(e, :e), :id)::Int), ex)
     for PDT in TT.parameters
         DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
-        
+
         for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
             if haskey(fn_to_DT, fn)
                 fnq = QuoteNode(fn)
@@ -174,7 +174,7 @@ Base.in(::Type{T}, e::EntityState{TT}) where {T, TT} = any(x->eltype(x) == T, TT
 end
 
 @generated function Base.setproperty!(e::EntityState{TT}, f::Symbol, val) where {TT}
-    fn_to_DT = Dict{Symbol, DataType}()
+    fn_to_DT = Dict{Symbol,DataType}()
     ex = :(error("$e does not have a Component with field $f."))
     for PDT in TT.parameters
         DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
@@ -195,7 +195,8 @@ end
             else
                 fn_to_DT[fn] = DT
                 fnq = QuoteNode(fn)
-                ex = Expr(:elseif, :(f === $fnq), :(return setfield!(e[$DT], $fnq, val)), ex)
+                ex = Expr(:elseif, :(f === $fnq), :(return setfield!(e[$DT], $fnq, val)),
+                          ex)
             end
         end
     end
@@ -207,17 +208,16 @@ end
     end
 end
 
-@generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple, T}
+@generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple,T}
     id = findfirst(x -> x <: AbstractComponent ? eltype(x) == T : x == T, TT.parameters)
     if id === nothing
         error("EntityState{$TT} has no Component{$T}.")
     end
     return quote
         $(Expr(:meta, :inline))
-        @inbounds getfield(e,:components)[$id]
+        @inbounds getfield(e, :components)[$id]
     end
 end
-
 
 @inline function Base.getindex(e::EntityState, ::Type{T}) where {T}
     t = component(e, T)
@@ -227,18 +227,20 @@ end
         return t
     end
 end
-    
+
 @inline function Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T}
     t = component(e, T)
     @assert t isa AbstractComponent "Cannot set a Component in a non referenced EntityState."
     return @inbounds t[e] = x
 end
-    
+
 @inline Base.length(::EntityState{TT}) where {TT} = length(TT.parameters)
+
 @inline function Base.iterate(i::EntityState, state = 1)
     state > length(i) && return nothing
     return @inbounds i.components[state][i.e], state + 1
 end
+
 @inline Base.@propagate_inbounds Base.getindex(e::EntityState, i::Int) = e.components[i][e.e]
 
 """
@@ -246,9 +248,7 @@ end
 
 Return the [`EntityState`](@ref) with the `i`th [`Entity`](@ref) and data in [Component](@ref Components) `c`.
 """
-function entity(c::AbstractComponent, i::Integer)
-    return EntityState(Entity(c, i), c)
-end
+entity(c::AbstractComponent, i::Integer) = EntityState(Entity(c, i), c)
 
 """
     last_entity(c::AbstractComponent)
@@ -256,4 +256,3 @@ end
 Retrieves the last [`Entity`](@ref) in `c`.
 """
 last_entity(c::AbstractComponent) = entity(c, length(c))
-

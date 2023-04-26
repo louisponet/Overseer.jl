@@ -26,7 +26,6 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
     @test Entity(2) in c
     @test length(c) == 2 == size(c)[1] == length(c.indices) == length(entity_data(c))
 
-
     @test c[Entity(2)] isa TestCompData
 
     @test entity(c, 1) isa EntityState{Tuple{T{TestCompData}}}
@@ -59,7 +58,9 @@ Function that can be overloaded to specify what the default [`AbstractComponent`
 component_type(::Type{TC}) where {TC} = Component{TC}
 
 @inline indices_iterator(a::AbstractComponent)::Indices = a.indices
-@inline reverse_indices_iterator(a::AbstractComponent) = ReverseIndicesIterator(a.indices, i -> true)
+@inline function reverse_indices_iterator(a::AbstractComponent)
+    return ReverseIndicesIterator(a.indices, i -> true)
+end
 
 """
     in(entity, component)
@@ -75,15 +76,15 @@ Base.isempty(c::AbstractComponent) = isempty(c.indices)
 
 Base.eltype(::Type{<:AbstractComponent{T}}) where {T} = T
 
-function Base.delete!(c::AbstractComponent, es::Vector{Entity})
+Base.delete!(c::AbstractComponent, es::Vector{Entity}) =
     for e in es
         if e in c
             pop!(c, e)
         end
     end
-end
 
-Base.@propagate_inbounds function Base.getindex(c::AbstractComponent, I::AbstractVector{<:AbstractEntity})
+Base.@propagate_inbounds function Base.getindex(c::AbstractComponent,
+                                                I::AbstractVector{<:AbstractEntity})
     return map(x -> c[x], I)
 end
 
@@ -112,9 +113,13 @@ function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:Integer})
     return c
 end
 
-Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:AbstractEntity}) = permute!(c, map(x -> c.indices[x.id], permvec))
+function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:AbstractEntity})
+    return permute!(c, map(x -> c.indices[x.id], permvec))
+end
 
-Base.sortperm(c::AbstractComponent, args...; kwargs...) = sortperm(entity_data(c), args...; kwargs...)
+function Base.sortperm(c::AbstractComponent, args...; kwargs...)
+    return sortperm(entity_data(c), args...; kwargs...)
+end
 
 function Base.:(==)(c1::C1, c2::C2) where {C1<:AbstractComponent,C2<:AbstractComponent}
     if eltype(C1) != eltype(C2) || length(c1) != length(c2)
@@ -122,16 +127,14 @@ function Base.:(==)(c1::C1, c2::C2) where {C1<:AbstractComponent,C2<:AbstractCom
     elseif length(c1) > 20 && hash(c1) != hash(c2)
         return false
     else
-        return all(i -> (e = entity(c1, i); (e in c2) && (@inbounds c2[e] == c1[e])), eachindex(c1))
+        return all(i -> (e = entity(c1, i); (e in c2) && (@inbounds c2[e] == c1[e])),
+                   eachindex(c1))
     end
 end
 
 Base.IndexStyle(::Type{AbstractComponent}) = IndexLinear()
 
-
 """
-    Component
-    
 The most basic Component type.
 
 Indexing into a component with an [`Entity`](@ref) will return the data linked to that entity,
@@ -223,11 +226,7 @@ end
 function process_typedef(typedef, mod)
     global td = nothing
     MacroTools.postwalk(typedef) do x
-        if @capture(x, struct T_
-            fields__
-        end | mutable struct T_
-            fields__
-        end)
+        if @capture(x, struct T_ fields__ end | mutable struct T_ fields__ end)
             global td = T
         end
         x
@@ -236,13 +235,18 @@ function process_typedef(typedef, mod)
 end
 
 """
-    @component
-
 This takes a struct definition and register it so that it will be stored inside a [`Component`](@ref) when attached to [Entities](@ref).
+
+# Example
+```julia
+@component struct MyComp
+    v::Float64
+end
 """
 macro component(typedef)
     return esc(Overseer._component(typedef, __module__))
 end
+
 function _component(typedef, mod)
     tn = process_typedef(typedef, mod)
     return quote
@@ -256,7 +260,6 @@ end
 #            PooledComponent           #
 #                                      #
 ########################################
-
 struct ApplyToPool
     e::Entity
 end
@@ -264,8 +267,6 @@ end
 Base.parent(e::Entity) = ApplyToPool(e)
 
 """
-    PooledComponent
-
 A [`PooledComponent`](@ref) allows for sharing data between many [Entities](@ref).
 Essentially, the indices into the data pool are stored for each [`Entity`](@ref), rather than the data itself.
 
@@ -303,14 +304,16 @@ PooledComponent{T}() where {T} = PooledComponent{T}(Indices(), Int[], Int[], T[]
     
 Returns which pool `entity` or the `ith` entity belongs to.
 """
-Base.@propagate_inbounds @inline pool(c::PooledComponent, e::AbstractEntity) = c.pool[c.indices[e.id]]
+Base.@propagate_inbounds @inline function pool(c::PooledComponent, e::AbstractEntity)
+    return c.pool[c.indices[e.id]]
+end
 Base.@propagate_inbounds @inline pool(c::PooledComponent, e::Int) = c.pool[c.indices[e]]
 
 entity_data(c::PooledComponent) = c.pool
 
 npools(c::PooledComponent) = length(c.data)
 
-Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, i::Integer) = c.data[c.pool[i]]
+Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, i::Integer)     = c.data[c.pool[i]]
 Base.@propagate_inbounds @inline Base.setindex!(c::PooledComponent, v, i::Integer) = c.data[i] = v
 
 @inline function Base.getindex(c::PooledComponent, e::AbstractEntity)
@@ -327,7 +330,6 @@ Base.@propagate_inbounds @inline function Base.parent(c::PooledComponent, i::Int
     return @inbounds Entity(c.indices.packed[findfirst(isequal(i), c.pool)])
 end
 Base.@propagate_inbounds @inline Base.parent(c::PooledComponent, e::Entity) = parent(c, pool(c, e))
-
 
 # c[entity] = value
 # set value of <only> this entity
@@ -412,13 +414,14 @@ function Base.empty!(c::PooledComponent)
 end
 
 function maybe_cleanup_empty_pool!(c::PooledComponent, poolid)
-    if c.pool_size[poolid] == 0
-        deleteat!(c.data, poolid)
-        deleteat!(c.pool_size, poolid)
-        for i in eachindex(c.pool)
-            if c.pool[i] > poolid
-                c.pool[i] -= 1
-            end
+    c.pool_size[poolid] != 0 && return
+
+    deleteat!(c.data, poolid)
+    deleteat!(c.pool_size, poolid)
+
+    for i in eachindex(c.pool)
+        if c.pool[i] > poolid
+            c.pool[i] -= 1
         end
     end
 end
@@ -442,8 +445,8 @@ function Base.pop!(c::PooledComponent, e::AbstractEntity)
 
         return val
     end
-
 end
+
 function Base.pop!(c::PooledComponent)
     @boundscheck if isempty(c)
         throw(BoundsError(c))
@@ -467,8 +470,6 @@ end
 Base.sortperm(c::PooledComponent) = sortperm(c.pool)
 
 """
-    @pooled_component
-
 This takes a struct definition and register it so that it will be stored inside a [`PooledComponent`](@ref) when attached to [Entities](@ref).
 """
 macro pooled_component(typedef)
@@ -484,9 +485,6 @@ function _pooled_component(typedef, mod)
 end
 
 """
-    make_unique!
-
-
 Checks whether duplicate data exists in a [`PooledComponent`](@ref) and if so points all [Entities](@ref) to only
 a single copy while removing the duplicates.
 """
@@ -535,4 +533,3 @@ function make_unique!(c::PooledComponent)
 
     return
 end
-

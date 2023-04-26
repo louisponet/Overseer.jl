@@ -2,8 +2,6 @@ module Overseer
 using MacroTools
 
 """
-    AbstractComponent
-
 Abstract type for all [Components](@ref). For now the only two [`AbstractComponents`](@ref AbstractComponent) are [`Component`](@ref) and [`PooledComponent`](@ref).
 Most functionality that is defined for the [`AbstractComponent`](@ref) type assumes that there is a `.indices` member field that is of type
 [`Indices`](@ref).
@@ -17,8 +15,6 @@ abstract type AbstractComponent{T} <: AbstractVector{T} end
 abstract type AbstractGroup end
 
 """
-    System
-
 Systems represent the part of ECS where the actual "work" happens,
 by overloading the [`Overseer.update`](@ref) function for a specific
 `System`, with the signature `Overseer.update(::System, m::AbstractLedger)`.
@@ -31,8 +27,6 @@ some settings parameters.
 abstract type System end
 
 """
-    AbstractLedger
-
 Abstract type for all ECS ledgers. The easiest way to use the interface is by including a standard
 [`Ledger`](@ref) as a member field and defining [`ledger`](@ref) for your new [`AbstractLedger`](@ref)
 type to return that field. 

@@ -26,8 +26,6 @@ l = Ledger(Stage(:example, [ExampleSystem()]))
 requested_components(::System) = ()
 
 """
-    Stage
-
 Represents a set of [`Systems`](@ref System) that get executed as steps by calling `update` on those systems.
 The steps are a `Vector` of other `Stages`, `Systems`, or a `Vector` of those.
 During the [`update`](@ref update(::Stage, ::AbstractLedger)) call on a `Stage`, if one of the steps is found to be a `Vector` it will be assumed
