@@ -28,9 +28,9 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
 
     @test c[Entity(2)] isa TestCompData
 
-    @test entity(c, 1) isa EntityState{Tuple{T{TestCompData}}}
+    @test entity(c, 1) isa EntityState{Tuple{Base.RefArray{TestCompData, T{TestCompData}, Nothing}}}
     @test pop!(c, Entity(2)) == TestCompData(1)
-    @test pop!(c) == EntityState(Entity(1), TestCompData(1))
+    @test pop!(c) == EntityState(Entity(1), (Ref(TestCompData(1)),))
     @test isempty(c)
 
     c[Entity(1)] = TestCompData(1)
@@ -57,6 +57,9 @@ component(c::AbstractComponent) = MethodError(component, c)
 @inline data(c::AbstractComponent) = data(component(c))
 @inline indices(c::AbstractComponent) = indices(component(c))
 @inline data_index(c::AbstractComponent, args...) = data_index(component(c), args...)
+
+@inline Base.Ref(c::AbstractComponent, e::AbstractEntity) = Ref(c, data_index(c, e))
+
 """
     in(entity, component)
 
@@ -82,6 +85,7 @@ Base.pop!(c::AbstractComponent, args...) = pop!(component(c), args...)
 
 Base.empty!(c::AbstractComponent) = empty!(component(c))
 
+
 Base.@propagate_inbounds @inline Base.getindex(c::AbstractComponent, i::Integer) = data(c)[data_index(c, i)]
 
 @inline function Base.getindex(c::AbstractComponent, e::AbstractEntity)
@@ -96,9 +100,9 @@ Base.@propagate_inbounds function Base.getindex(c::AbstractComponent,
     return map(x -> c[x], I)
 end
 
-Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent, v, i::Integer) = data(c)[data_index(c, i)] = v
+Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent, v, i::Integer) = (setindex!(data(c), v, data_index(c, i)); return c)
 Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent, v, e::AbstractEntity) =
-    setindex!(component(c), v, e)
+    (setindex!(component(c), v, e); return c)
 
 function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:Integer})
     permute!(data(c), permvec)
@@ -192,10 +196,12 @@ Base.@propagate_inbounds @inline data_index(c::Component, e::AbstractEntity) = c
     @boundscheck if !in(e, c)
         push!(c.indices, eid)
         push!(c.data, v)
-        return v
+        return c
     end
-    @inbounds c.data[c.indices[eid]] = v
-    return v
+    
+    setindex!(c.data, v, c.indices[eid])
+    
+    return c
 end
 
 function Base.empty!(c::Component)
@@ -228,7 +234,7 @@ function Base.pop!(c::AbstractComponent)
         throw(BoundsError(c))
     end
     @inbounds begin
-        return EntityState(Entity(pop!(c.indices)), pop!(c.data))
+        return EntityState(Entity(pop!(c.indices)), (Ref(pop!(c.data)),))
     end
 end
 
@@ -377,7 +383,7 @@ Base.@propagate_inbounds @inline Base.parent(c::PooledComponent, e::Entity) = pa
         push!(c.pool_size, 1)
         push!(c.data, v)
     end
-    return v
+    return c
 end
 
 # c[entity] = parent
@@ -410,7 +416,7 @@ end
         end
         c.pool_size[pg] += 1
 
-        return c[p]
+        return c
     end
 end
 
@@ -422,7 +428,7 @@ end
         throw(BoundsError(c, Entity(e)))
     end
     @inbounds c.data[pool(c, e.id)] = v
-    return v
+    return c
 end
 
 function Base.empty!(c::PooledComponent)
@@ -477,7 +483,7 @@ function Base.pop!(c::PooledComponent)
         val = c.data[g]
         c.pool_size[g] -= 1
         maybe_cleanup_empty_pool!(c, g)
-        return EntityState(e, val)
+        return EntityState(e, (Ref(val),))
     end
 end
 

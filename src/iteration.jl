@@ -169,7 +169,7 @@ end
    
 Base.IteratorSize(::EntityIterator) = Base.SizeUnknown()
 Base.IteratorEltype(::EntityIterator) = Base.HasEltype()
-Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{TT}
+Base.eltype(::EntityIterator{T, TT}) where {T, TT} = EntityState{Tuple{map(x->Base.RefArray{eltype(x), x, Nothing}, TT.parameters)...}}
 Base.length(i::EntityIterator) = length(i.it)
 
 function Base.filter(f, it::EntityIterator)
@@ -204,7 +204,7 @@ Base.in(e::AbstractEntity, i::EntityIterator) = in(e.id, i.it)
     n = iterate(i.it, state)
     n === nothing && return n
     e = Entity(n[1])
-    return EntityState(e, i.components), n[2]
+    return EntityState(e, i.components...), n[2]
 end
 
 Base.last(i::EntityIterator) = EntityState(Entity(last(i.it)), i.components)
@@ -361,8 +361,10 @@ entity_pool(c::PooledComponent, e::AbstractEntity) = entity_pool(c, pool(c, e))
     state[2] > i.c.pool_size[i.pool_id] && return nothing
     n = findnext(isequal(i.pool_id), i.c.pool, state[1])
     n === nothing && return n
-    return EntityState(Entity(i.c.indices.packed[n]), i.c), (n + 1, state[2] + 1)
+    return EntityState(Entity(i.c.indices.packed[n]), (Ref(i.c, n),)), (n + 1, state[2] + 1)
 end
+
+Base.Ref(iterator::EntityPoolIterator, e::AbstractEntity) = Ref(iterator.c, e)
 
 Base.getindex(iterator::EntityPoolIterator, i::Int) = iterate(iterator, (i, 1))[1]
     

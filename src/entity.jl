@@ -113,7 +113,7 @@ struct EntityState{TT<:Tuple} <: AbstractEntity
     e::Entity
     components::TT
 end
-EntityState(e::Entity, comps...) = EntityState(e, comps)
+EntityState(e::Entity, comps...) = EntityState(e, map(x->Ref(x, e), comps))
 
 Entity(e::EntityState) = e.e
 
@@ -124,11 +124,7 @@ function Base.show(io::IO, e::EntityState)
     println(io, "$(e.e)")
     println(io, "Components:")
     for c in e.components
-        if c isa AbstractComponent
-            println(io, "$(c[e])")
-        else
-            println(io, "$c")
-        end
+        println(io, "$(c[])")
     end
 end
 
@@ -142,7 +138,7 @@ Base.in(::Type{T}, e::EntityState{TT}) where {T,TT} = any(x -> eltype(x) == T, T
     ex = :(getfield(e, f))
     ex = Expr(:elseif, :(f === :id), :(return getfield(getfield(e, :e), :id)::Int), ex)
     for PDT in TT.parameters
-        DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
+        DT = PDT <: Ref ? eltype(PDT) : PDT
 
         for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
             if haskey(fn_to_DT, fn)
@@ -177,7 +173,7 @@ end
     fn_to_DT = Dict{Symbol,DataType}()
     ex = :(error("$e does not have a Component with field $f."))
     for PDT in TT.parameters
-        DT = PDT <: AbstractComponent ? eltype(PDT) : PDT
+        DT = PDT <: Ref ? eltype(PDT) : PDT
         for (fn, ft) in zip(fieldnames(DT), fieldtypes(DT))
             if haskey(fn_to_DT, fn)
                 fnq = QuoteNode(fn)
@@ -209,9 +205,9 @@ end
 end
 
 @generated function component(e::EntityState{TT}, ::Type{T}) where {TT<:Tuple,T}
-    id = findfirst(x -> x <: AbstractComponent ? eltype(x) == T : x == T, TT.parameters)
+    id = findfirst(x -> x <: Ref ? eltype(x) == T : x == T, TT.parameters)
     if id === nothing
-        error("EntityState{$TT} has no Component{$T}.")
+        error("EntityState{$TT} has no Component $T.")
     end
     return quote
         $(Expr(:meta, :inline))
@@ -221,34 +217,30 @@ end
 
 @inline function Base.getindex(e::EntityState, ::Type{T}) where {T}
     t = component(e, T)
-    if t isa AbstractComponent
-        return @inbounds t[e.e]
-    else
-        return t
-    end
+    return @inbounds t[]
 end
 
 @inline function Base.setindex!(e::EntityState, x::T, ::Type{T}) where {T}
     t = component(e, T)
-    @assert t isa AbstractComponent "Cannot set a Component in a non referenced EntityState."
-    return @inbounds t[e] = x
+    @assert t isa Ref "Cannot set a Component in a non referenced EntityState."
+    return @inbounds t[] = x
 end
 
 @inline Base.length(::EntityState{TT}) where {TT} = length(TT.parameters)
 
 @inline function Base.iterate(i::EntityState, state = 1)
     state > length(i) && return nothing
-    return @inbounds i.components[state][i.e], state + 1
+    return @inbounds i.components[state][], state + 1
 end
 
-@inline Base.@propagate_inbounds Base.getindex(e::EntityState, i::Int) = e.components[i][e.e]
+@inline Base.@propagate_inbounds Base.getindex(e::EntityState, i::Int) = e.components[i][]
 
 """
     entity(c, i)
 
 Return the [`EntityState`](@ref) with the `i`th [`Entity`](@ref) and data in [Component](@ref Components) `c`.
 """
-entity(c::AbstractComponent, i::Integer) = EntityState(Entity(c, i), c)
+entity(c::AbstractComponent, i::Integer) = EntityState(Entity(c, i), (Ref(c, i),))
 
 """
     last_entity(c::AbstractComponent)

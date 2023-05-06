@@ -38,23 +38,23 @@ for CT in (Component, PooledComponent)
 
         @testset "Basic iteration" begin
             it = @entities_in(c)
-            @test iterate(it)[1] == EntityState(Entity(2), (c[Entity(2)],))
+            @test iterate(it)[1] == EntityState(Entity(2), c)
             s = 0
             for e in it
                 s += e.p
             end
             @test s == sum(x->c[x].p, eachindex(c))
             
-            c[EntityState(Entity(2), (c[Entity(2)],))] = Test1(321)
-            @test c[EntityState(Entity(2), (c[Entity(2)],))] == Test1(321)
+            c[EntityState(Entity(2), c)] = Test1(321)
+            @test c[EntityState(Entity(2), c)] == Test1(321)
 
             c[Entity(2)] = Test1(2)
 
             @suppress begin
-                show(EntityState(Entity(2), (c[Entity(2)],)))
+                show(EntityState(Entity(2), c))
             end
 
-            t = EntityState(Entity(2), (c[Entity(2)],))
+            t = EntityState(Entity(2), c)
             t.p = 4
             @test c[t].p == 4
             @test c[Entity(2)].p == 4
@@ -237,7 +237,7 @@ for (CT1, CT2) in ((Component, PooledComponent, Component, PooledComponent), (Co
             iter = @entities_in(comp1 && comp2)
             es = collect(iter)
             @test getfield.(es, :e) == [e2]
-            @test eltype(es) == Overseer.EntityState{Tuple{Component{Test1},PooledComponent{Test2}}}
+            @test eltype(es) == Overseer.EntityState{Tuple{Base.RefArray{Test1, Component{Test1},Nothing}, Base.RefArray{Test2, PooledComponent{Test2}, Nothing}}}
         end
     end
 end
