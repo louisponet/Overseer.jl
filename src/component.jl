@@ -24,7 +24,7 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
     c[Entity(1)] = TestCompData(1)
     c[Entity(2)] = TestCompData(1)
     @test Entity(2) in c
-    @test length(c) == 2 == size(c)[1] == length(c.indices) == length(entity_data(c))
+    @test length(c) == 2 == size(c)[1] == length(c.indices) == length(data(c))
 
     @test c[Entity(2)] isa TestCompData
 
@@ -37,7 +37,7 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
     c[Entity(2)] = TestCompData(2)
 
     # Needed for order swapping
-    entity_data(c)[1], entity_data(c)[2] = entity_data(c)[2], entity_data(c)[1]
+    data(c)[1], data(c)[2] = data(c)[2], data(c)[1]
     @test c[Entity(2)] == TestCompData(1)
     @test c[Entity(1)] == TestCompData(2)
 
@@ -50,29 +50,24 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
     @test isempty(c)
 end
 
-"""
-    component_type(::Type) 
+## AbstractComponent Interface: For new components that have a standard component underneath, just overload `component` to point to it
 
-Function that can be overloaded to specify what the default [`AbstractComponent`](@ref) of a given type is. This is mainly used in the various component macros.
-"""
-component_type(::Type{TC}) where {TC} = Component{TC}
+component(c::AbstractComponent) = MethodError(component, c)
 
-@inline indices_iterator(a::AbstractComponent)::Indices = a.indices
-@inline function reverse_indices_iterator(a::AbstractComponent)
-    return ReverseIndicesIterator(a.indices, i -> true)
-end
-
+@inline data(c::AbstractComponent) = data(component(c))
+@inline indices(c::AbstractComponent) = indices(component(c))
+@inline data_index(c::AbstractComponent, args...) = data_index(component(c), args...)
 """
     in(entity, component)
 
 Checks whether `entity` has a data entry in `component`.
 """
-Base.in(i::Integer, c::AbstractComponent) = in(i, c.indices)
+Base.in(i::Integer, c::AbstractComponent) = in(i, indices(c))
 Base.in(e::AbstractEntity, c::AbstractComponent) = in(Entity(e).id, c)
 
-Base.length(c::AbstractComponent) = length(c.indices)
-Base.size(c::AbstractComponent) = size(c.indices)
-Base.isempty(c::AbstractComponent) = isempty(c.indices)
+Base.length(c::AbstractComponent)  = length(indices(c))
+Base.size(c::AbstractComponent)    = size(indices(c))
+Base.isempty(c::AbstractComponent) = isempty(indices(c))
 
 Base.eltype(::Type{<:AbstractComponent{T}}) where {T} = T
 
@@ -83,9 +78,67 @@ Base.delete!(c::AbstractComponent, es::Vector{Entity}) =
         end
     end
 
+Base.pop!(c::AbstractComponent, args...) = pop!(component(c), args...)
+
+Base.empty!(c::AbstractComponent) = empty!(component(c))
+
+Base.@propagate_inbounds @inline Base.getindex(c::AbstractComponent, i::Integer) = data(c)[data_index(c, i)]
+
+@inline function Base.getindex(c::AbstractComponent, e::AbstractEntity)
+    @boundscheck if !in(e, c)
+        throw(BoundsError(c, Entity(e)))
+    end
+    return @inbounds data(c)[data_index(c, e)]
+end
+
 Base.@propagate_inbounds function Base.getindex(c::AbstractComponent,
                                                 I::AbstractVector{<:AbstractEntity})
     return map(x -> c[x], I)
+end
+
+Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent, v, i::Integer) = data(c)[data_index(c, i)] = v
+Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent, v, e::AbstractEntity) =
+    setindex!(component(c), v, e)
+
+function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:Integer})
+    permute!(data(c), permvec)
+    return c
+end
+
+function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:AbstractEntity})
+    return permute!(c, map(x -> indices(c)[x.id], permvec))
+end
+
+function Base.sortperm(c::AbstractComponent, args...; kwargs...)
+    return sortperm(data(c), args...; kwargs...)
+end
+
+function Base.:(==)(c1::C1, c2::C2) where {C1<:AbstractComponent,C2<:AbstractComponent}
+    if eltype(C1) != eltype(C2) || length(c1) != length(c2)
+        return false
+    elseif length(c1) > 20 && hash(c1) != hash(c2)
+        return false
+    else
+        return all(i -> (e = entity(c1, i); (e in c2) && (@inbounds c2[e] == c1[e])),
+                   eachindex(c1))
+    end
+end
+
+Base.IndexStyle(::Type{AbstractComponent}) = IndexLinear()
+
+Base.iterate(c::AbstractComponent, args...) = iterate(component(c), args...)
+
+"""
+    component_type(::Type) 
+
+Function that can be overloaded to specify what the default [`AbstractComponent`](@ref) of a given type is. This is mainly used in the various component macros.
+"""
+component_type(::Type{TC}) where {TC} = Component{TC}
+
+@inline indices_iterator(a::AbstractComponent)::Indices = indices(a)
+
+@inline function reverse_indices_iterator(a::AbstractComponent)
+    return ReverseIndicesIterator(indices(a), i -> true)
 end
 
 """
@@ -102,37 +155,11 @@ function swap_order!(c::AbstractComponent, e1::AbstractEntity, e2::AbstractEntit
         throw(BoundsError(c, Entity(e2)))
     end
     @inbounds begin
-        id1, id2 = swap_order!(c.indices, e1.id, e2.id)
-        edata = entity_data(c)
+        id1, id2 = swap_order!(indices(c), e1.id, e2.id)
+        edata = data(c)
         edata[id1], edata[id2] = edata[id2], edata[id1]
     end
 end
-
-function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:Integer})
-    permute!(entity_data(c), permvec)
-    return c
-end
-
-function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:AbstractEntity})
-    return permute!(c, map(x -> c.indices[x.id], permvec))
-end
-
-function Base.sortperm(c::AbstractComponent, args...; kwargs...)
-    return sortperm(entity_data(c), args...; kwargs...)
-end
-
-function Base.:(==)(c1::C1, c2::C2) where {C1<:AbstractComponent,C2<:AbstractComponent}
-    if eltype(C1) != eltype(C2) || length(c1) != length(c2)
-        return false
-    elseif length(c1) > 20 && hash(c1) != hash(c2)
-        return false
-    else
-        return all(i -> (e = entity(c1, i); (e in c2) && (@inbounds c2[e] == c1[e])),
-                   eachindex(c1))
-    end
-end
-
-Base.IndexStyle(::Type{AbstractComponent}) = IndexLinear()
 
 """
 The most basic Component type.
@@ -150,19 +177,15 @@ end
 
 Component{T}() where {T} = Component(Indices(), T[])
 
-entity_data(c::Component) = c.data
+@inline indices(c::Component) = c.indices
+@inline data(c::Component) = c.data
+
+Base.@propagate_inbounds @inline data_index(c::Component, i::Integer) = i
+Base.@propagate_inbounds @inline data_index(c::Component, e::AbstractEntity) = c.indices[e.id]
+
+@inline component(c::Component) = c
 
 ##### BASE Extensions ####
-Base.@propagate_inbounds @inline Base.getindex(c::Component, i::Integer) = c.data[i]
-Base.@propagate_inbounds @inline Base.setindex!(c::Component, v, i::Integer) = c.data[i] = v
-
-@inline function Base.getindex(c::Component, e::AbstractEntity)
-    eid = Entity(e).id
-    @boundscheck if !in(e, c)
-        throw(BoundsError(c, Entity(e)))
-    end
-    return @inbounds c.data[c.indices[eid]]
-end
 
 @inline function Base.setindex!(c::Component{T}, v::T, e::AbstractEntity) where {T}
     eid = Entity(e).id
@@ -298,6 +321,10 @@ end
 
 PooledComponent{T}() where {T} = PooledComponent{T}(Indices(), Int[], Int[], T[])
 
+@inline component(c::PooledComponent) = c
+@inline indices(c::PooledComponent) = c.indices
+@inline data(c::PooledComponent) = c.data
+
 """
     pool(pooled_compnent, entity)
     pool(pooled_compnent, i)
@@ -309,19 +336,12 @@ Base.@propagate_inbounds @inline function pool(c::PooledComponent, e::AbstractEn
 end
 Base.@propagate_inbounds @inline pool(c::PooledComponent, e::Int) = c.pool[c.indices[e]]
 
-entity_data(c::PooledComponent) = c.pool
+
+Base.@propagate_inbounds @inline data_index(c::PooledComponent, i::Integer) = c.pool[i] 
+Base.@propagate_inbounds @inline data_index(c::PooledComponent, e::AbstractEntity) = pool(c, e)
+
 
 npools(c::PooledComponent) = length(c.data)
-
-Base.@propagate_inbounds @inline Base.getindex(c::PooledComponent, i::Integer)     = c.data[c.pool[i]]
-Base.@propagate_inbounds @inline Base.setindex!(c::PooledComponent, v, i::Integer) = c.data[i] = v
-
-@inline function Base.getindex(c::PooledComponent, e::AbstractEntity)
-    @boundscheck if !in(e, c)
-        throw(BoundsError(c, Entity(e)))
-    end
-    return @inbounds c.data[pool(c, e)]
-end
 
 Base.@propagate_inbounds @inline function Base.parent(c::PooledComponent, i::Int)
     @boundscheck if i > length(c.data)
@@ -532,4 +552,22 @@ function make_unique!(c::PooledComponent)
     end
 
     return
+end
+
+function Base.permute!(c::PooledComponent, permvec::AbstractVector{<:Integer})
+    permute!(c.pool, permvec)
+    return c
+end
+
+function swap_order!(c::PooledComponent, e1::AbstractEntity, e2::AbstractEntity)
+    @boundscheck if !in(e1, c)
+        throw(BoundsError(c, Entity(e1)))
+    elseif !in(e2, c)
+        throw(BoundsError(c, Entity(e2)))
+    end
+    @inbounds begin
+        id1, id2 = swap_order!(indices(c), e1.id, e2.id)
+        edata = c.pool
+        edata[id1], edata[id2] = edata[id2], edata[id1]
+    end
 end

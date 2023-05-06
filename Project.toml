@@ -1,7 +1,7 @@
 name = "Overseer"
 uuid = "1ada24be-c16d-4464-9f61-27c2e0f16645"
 authors = ["louisponet <louisponet@gmail.com>"]
-version = "0.2.10"
+version = "0.3.1"
 
 [deps]
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
