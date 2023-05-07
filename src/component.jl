@@ -1,62 +1,14 @@
-using Test
-
-struct TestCompData
-    t::Int
-end
-
-# AbstractComponent Interface
-"""
-Tests whether an [`AbstractComponent`](@ref) satisfies the interface.
-"""
-function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent}
-    c = T{TestCompData}()
-
-    @test eltype(c) <: TestCompData
-    if hasfield(T, :indices)
-        @test c.indices isa Indices
-    else
-        @test indices_iterator(c) isa IndicesIterator
-        @test reverse_indices_iterator(c) isa ReverseIndicesIterator
-    end
-
-    @test isempty(c)
-    @test length(c) == 0
-    c[Entity(1)] = TestCompData(1)
-    c[Entity(2)] = TestCompData(1)
-    @test Entity(2) in c
-    @test length(c) == 2 == size(c)[1] == length(c.indices) == length(data(c))
-
-    @test c[Entity(2)] isa TestCompData
-
-    @test entity(c, 1) isa EntityState{Tuple{T{TestCompData}}}
-    @test pop!(c, Entity(2)) == TestCompData(1)
-    @test pop!(c) == EntityState(Entity(1), TestCompData(1))
-    @test isempty(c)
-
-    c[Entity(1)] = TestCompData(1)
-    c[Entity(2)] = TestCompData(2)
-
-    # Needed for order swapping
-    data(c)[1], data(c)[2] = data(c)[2], data(c)[1]
-    @test c[Entity(2)] == TestCompData(1)
-    @test c[Entity(1)] == TestCompData(2)
-
-    c[Entity(1)], c[Entity(2)] = c[Entity(2)], c[Entity(1)]
-    @test c[Entity(1)] == TestCompData(1)
-    @test c[Entity(2)] == TestCompData(2)
-
-    @test iterate(c)[1] isa TestCompData
-    empty!(c)
-    @test isempty(c)
-end
-
 ## AbstractComponent Interface: For new components that have a standard component underneath, just overload `component` to point to it
+# Run the Overseer.test_abstractcomponent_interface on your new component type
 
 component(c::AbstractComponent) = MethodError(component, c)
 
 @inline data(c::AbstractComponent) = data(component(c))
 @inline indices(c::AbstractComponent) = indices(component(c))
 @inline data_index(c::AbstractComponent, args...) = data_index(component(c), args...)
+
+Base.Ref(c::AbstractComponent, e::AbstractEntity) = Ref(c, data_index(c,e))
+
 """
     in(entity, component)
 

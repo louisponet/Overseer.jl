@@ -20,98 +20,9 @@ end
 end
 
 for CT in (Component, PooledComponent)
-    @testset "Interface: $CT" begin
-        @testset "AbstractComponent interface" begin Overseer.test_abstractcomponent_interface(CT) end
-        
-        entities1 = [[Entity(i) for i in 2:2:10]; [Entity(i) for i in 134:274:7592]]
-
-        c = CT{Test1}()
-        
-        @testset "Creation and in" begin 
-            for e in entities1
-                c[e] = eltype(c)(e.id)
-            end
-            for e in entities1
-                @test in(e, c)
-            end
-        end
-
-        @testset "Basic iteration" begin
-            it = @entities_in(c)
-            @test iterate(it)[1] == EntityState(Entity(2), (c[Entity(2)],))
-            s = 0
-            for e in it
-                s += e.p
-            end
-            @test s == sum(x->c[x].p, eachindex(c))
-            
-            c[EntityState(Entity(2), (c[Entity(2)],))] = Test1(321)
-            @test c[EntityState(Entity(2), (c[Entity(2)],))] == Test1(321)
-
-            c[Entity(2)] = Test1(2)
-
-            @suppress begin
-                show(EntityState(Entity(2), (c[Entity(2)],)))
-            end
-
-            t = EntityState(Entity(2), (c[Entity(2)],))
-            t.p = 4
-            @test c[t].p == 4
-            @test c[Entity(2)].p == 4
-            t.p = 2
-        end
-        
-        @testset "Basic map, filter" begin
-            @test map(e -> e.p, c) == map(e -> c[e].p, eachindex(c))
-            @test filter(e -> e.p < 5, c) == c[filter(e -> c[e].p < 5, eachindex(c))]
-            @test map(e -> e.p, @entities_in(c)) == map(e -> c[e].p, eachindex(c))
-            @test filter(e -> e.p < 5, @entities_in(c)) == filter(e -> e.p < 5, collect(@entities_in(c)))
-       end
-       
-        @testset "Component manipulation" begin
-            @test pop!(c, Entity(10)) == Test1(10)
-
-            @test length(c) == length(entities1) - 1
-            @test c[1] == Test1(2)
-
-            c[Entity(13)] = Test1(50)
-            @test c[Entity(13)] == Test1(50)
-
-            pop!(c, Entity(13))
-            @test !in(Entity(13), c)
-
-            # swap_ordering
-            c[Entity(12)] = Test1()
-
-            @test_throws BoundsError swap_order!(c, Entity(14), Entity(15))
-            @test_throws BoundsError swap_order!(c, Entity(13), Entity(14))
-
-            e1 = Entity(134)
-            e2 = Entity(8)
-            orig1 = c[e1]
-            orig2 = c[e2]
-
-            orig_id1 = c.indices[e1.id]
-            orig_id2 = c.indices[e2.id]
-
-            swap_order!(c, e1, e2)
-            @test c[e2] == orig2
-            @test c[e1] == orig1
-
-            @test c.indices[e2.id] == orig_id1
-            @test c.indices[e1.id] == orig_id2
-
-            es = map(x->x.e, @entities_in(c))
-            cur = c[es]
-            pvec = reverse(es)
-            permute!(c, pvec)
-            @test reverse(cur) == c[es]
-            
-            empty!(c)
-            @test isempty(c)
-        end
-    end
+    Overseer.test_abstractcomponent_interface(CT)
 end
+
 for (CT1, CT2) in ((Component, PooledComponent, Component, PooledComponent), (Component, PooledComponent, PooledComponent, Component))
     @testset "Combined: $CT1, $CT2" begin
         entities1 = [Entity(i) for i in 2:2:10]
@@ -121,12 +32,17 @@ for (CT1, CT2) in ((Component, PooledComponent, Component, PooledComponent), (Co
         c1 = CT1{Test1}()
         c2 = CT1{Test2}()
         c3 = CT2{Test3}()
-        c4 = CT2{Test4}()        
+        c4 = CT2{Test4}()
+        
+
 
         for (c, es) in zip((c1, c2, c3, c4), (entities1, entities2, entities3, entities4))
             for e in es
                 c[e] = eltype(c)()
             end
+        end
+        @suppress begin
+            show(EntityState(Entity(2), (c1[Entity(2)],)))
         end
 
         for (c, es) in zip((c1, c2, c3, c4), (entities1, entities2, entities3, entities4))
