@@ -125,7 +125,14 @@ function Base.empty!(m::AbstractLedger)
 end
 
 function Base.getindex(m::AbstractLedger, ::Type{T})::component_type(T) where {T}
-    return get!(components(m), T, component_type(T)())
+    comps = components(m)
+    if haskey(comps, T)
+        return comps[T]::component_type(T)
+    else
+        c = component_type(T)()
+        comps[T] = c
+        return c
+    end
 end
 
 Base.copy(m::AbstractLedger) = Ledger(copy(entities(m)),

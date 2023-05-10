@@ -203,8 +203,8 @@ Base.in(e::AbstractEntity, i::EntityIterator) = in(e.id, i.it)
 @inline function Base.iterate(i::EntityIterator, state = i.it isa ReverseIndicesIterator ? length(i.it.shortest) : 1)
     n = iterate(i.it, state)
     n === nothing && return n
-    e = Entity(n[1])
-    return EntityState(e, i.components), n[2]
+    @inbounds e = Entity(n[1])
+    @inbounds return EntityState(e, i.components), n[2]
 end
 
 Base.last(i::EntityIterator) = EntityState(Entity(last(i.it)), i.components)

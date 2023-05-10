@@ -36,7 +36,7 @@ Base.empty!(c::AbstractComponent) = empty!(component(c))
 
 Base.@propagate_inbounds @inline Base.getindex(c::AbstractComponent, i::Integer) = data(c)[data_index(c, i)]
 
-@inline function Base.getindex(c::AbstractComponent, e::AbstractEntity)
+Base.@propagate_inbounds @inline function Base.getindex(c::AbstractComponent, e::AbstractEntity)
     @boundscheck if !in(e, c)
         throw(BoundsError(c, Entity(e)))
     end
@@ -139,7 +139,7 @@ Base.@propagate_inbounds @inline data_index(c::Component, e::AbstractEntity) = c
 
 ##### BASE Extensions ####
 
-@inline function Base.setindex!(c::Component{T}, v::T, e::AbstractEntity) where {T}
+Base.@propagate_inbounds @inline function Base.setindex!(c::Component{T}, v::T, e::AbstractEntity) where {T}
     eid = Entity(e).id
     @boundscheck if !in(e, c)
         push!(c.indices, eid)
@@ -161,7 +161,7 @@ end
 
 pops the data for `entity` out of `component`.
 """
-function Base.pop!(c::Component, e::AbstractEntity)
+Base.@propagate_inbounds @inline function Base.pop!(c::Component, e::AbstractEntity)
     @boundscheck if !in(e, c)
         throw(BoundsError(c, Entity(e)))
     end
@@ -175,7 +175,7 @@ function Base.pop!(c::Component, e::AbstractEntity)
     end
 end
 
-function Base.pop!(c::Component)
+Base.@propagate_inbounds @inline function Base.pop!(c::Component)
     @boundscheck if isempty(c)
         throw(BoundsError(c))
     end
@@ -305,29 +305,28 @@ Base.@propagate_inbounds @inline Base.parent(c::PooledComponent, e::Entity) = pa
 
 # c[entity] = value
 # set value of <only> this entity
-@inline function Base.setindex!(c::PooledComponent{T}, v::T, e::AbstractEntity) where {T}
+Base.@propagate_inbounds @inline function Base.setindex!(c::PooledComponent{T}, v::T, e::AbstractEntity) where {T}
     eid = e.id
-    if in(e, c)
-        @inbounds begin
-            pid = c.indices[eid]
-            g = c.pool[pid]
-            if c.pool_size[g] == 1
-                # the entity already has its own (otherwise empty) pool - adjust value
-                c.data[g] = v
-            else
-                # the entity is part of a larger pool - create a new one
-                c.pool_size[g] -= 1
-                push!(c.data, v)
-                push!(c.pool_size, 1)
-                c.pool[pid] = length(c.data)
-            end
-        end
-    else
-        # the entity is not in the component - add it
+    @boundscheck if !in(e, c)
         push!(c.indices, eid)
         push!(c.pool, length(c.data) + 1)
         push!(c.pool_size, 1)
         push!(c.data, v)
+        return v
+    end
+    @inbounds begin
+        pid = c.indices[eid]
+        g = c.pool[pid]
+        if c.pool_size[g] == 1
+            # the entity already has its own (otherwise empty) pool - adjust value
+            c.data[g] = v
+        else
+            # the entity is part of a larger pool - create a new one
+            c.pool_size[g] -= 1
+            push!(c.data, v)
+            push!(c.pool_size, 1)
+            c.pool[pid] = length(c.data)
+        end
     end
     return v
 end

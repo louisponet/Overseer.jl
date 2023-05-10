@@ -79,7 +79,7 @@ end
         return false
     else
         page = @inbounds rev[pageid]
-        return page !== NULL_INT_PAGE && !isempty(page) && @inbounds page[offset] != 0
+        return page !== NULL_INT_PAGE && @inbounds page[offset] != 0
     end
 end
 
@@ -146,7 +146,7 @@ end
     return s
 end
 
-@inline Base.@propagate_inbounds function Base.pop!(s::Indices)
+Base.@propagate_inbounds @inline function Base.pop!(s::Indices)
     if isempty(s)
         throw(ArgumentError("Cannot pop an empty set."))
     end
@@ -158,7 +158,7 @@ end
     return id
 end
 
-@inline Base.@propagate_inbounds function Base.pop!(s::Indices, id::Integer)
+Base.@propagate_inbounds @inline function Base.pop!(s::Indices, id::Integer)
     id < 0 && throw(ArgumentError("Int to pop needs to be positive."))
 
     @boundscheck if !in(id, s)
