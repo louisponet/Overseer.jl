@@ -192,7 +192,7 @@ end
 
     # Check some basics
     @test p1 in c5
-    @test pop!(c5, p1) == Test5(1)
+    @test pop!(c5, p1) == EntityState(p1, Test5(1))
     @test !(p1 in c5)
     @test length(c5.pool) == 9
     @test c5[p2] == Test5(2)

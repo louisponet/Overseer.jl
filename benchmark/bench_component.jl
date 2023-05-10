@@ -3,9 +3,8 @@ module BenchComponent
 using BenchmarkTools
 import Random
 using Overseer
-using Parameters
 
-@component @with_kw struct Spatial
+@component Base.@kwdef struct Spatial
     position::NTuple{3, Float64} = (1.0,1.0,1.0)
     velocity::NTuple{3, Float64} = (1.0,1.0,1.0)
 end

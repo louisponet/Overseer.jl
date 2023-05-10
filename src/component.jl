@@ -48,8 +48,8 @@ Base.@propagate_inbounds function Base.getindex(c::AbstractComponent,
     return map(x -> c[x], I)
 end
 
-Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent, v, i::Integer) = data(c)[data_index(c, i)] = v
-Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent, v, e::AbstractEntity) =
+Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent{T}, v::T, i::Integer) where {T} = data(c)[data_index(c, i)] = v
+Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent{T}, v::T, e::AbstractEntity) where {T} =
     setindex!(component(c), v, e)
 
 function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:Integer})
@@ -171,11 +171,11 @@ function Base.pop!(c::Component, e::AbstractEntity)
         c.data[id] = c.data[end]
         pop!(c.data)
         pop!(c.indices, e.id)
-        return v
+        return EntityState(Entity(e), v)
     end
 end
 
-function Base.pop!(c::AbstractComponent)
+function Base.pop!(c::Component)
     @boundscheck if isempty(c)
         throw(BoundsError(c))
     end
@@ -415,7 +415,7 @@ function Base.pop!(c::PooledComponent, e::AbstractEntity)
         val = c.data[g]
         maybe_cleanup_empty_pool!(c, g)
 
-        return val
+        return EntityState(Entity(e), val)
     end
 end
 

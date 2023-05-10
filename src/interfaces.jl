@@ -4,6 +4,11 @@ Base.@kwdef mutable struct TestCompData
     p::Int = 0
 end
 Base.:(==)(t::TestCompData, t1::TestCompData) = t.p == t1.p
+Base.:(<)(en1::TestCompData, en2::TestCompData) = en1.p < en2.p
+
+Base.:(<)(v, en1::TestCompData) = v < en1.p
+
+Base.:(==)(v, en1::TestCompData) = en1.p == v
 
 # AbstractComponent Interface
 """
@@ -15,24 +20,21 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
             c = T{TestCompData}()
 
             @test eltype(c) <: TestCompData
-            if hasfield(T, :indices)
-                @test c.indices isa Indices
-            else
-                @test indices_iterator(c) isa IndicesIterator
-                @test reverse_indices_iterator(c) isa ReverseIndicesIterator
-            end
+            @test indices(c) isa Indices
+            @test indices_iterator(c) isa Union{Indices, IndicesIterator}
+            @test reverse_indices_iterator(c) isa ReverseIndicesIterator
 
             @test isempty(c)
             @test length(c) == 0
             c[Entity(1)] = TestCompData(1)
             c[Entity(2)] = TestCompData(1)
             @test Entity(2) in c
-            @test length(c) == 2 == size(c)[1] == length(c.indices) == length(data(c))
+            @test length(c) == 2 == size(c)[1] == length(indices(c)) == length(data(c))
 
             @test c[Entity(2)] isa TestCompData
 
             @test entity(c, 1) isa EntityState{Tuple{T{TestCompData}}}
-            @test pop!(c, Entity(2)) == TestCompData(1)
+            @test pop!(c, Entity(2)) == EntityState(Entity(2), TestCompData(1))
             @test pop!(c) == EntityState(Entity(1), TestCompData(1))
             @test isempty(c)
 
@@ -94,7 +96,7 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
        end
        
         @testset "Component manipulation" begin
-            @test pop!(c, Entity(10)) == TestCompData(10)
+            @test pop!(c, Entity(10)) == EntityState(Entity(10), TestCompData(10))
 
             @test length(c) == length(entities1) - 1
             @test c[1] == TestCompData(2)
@@ -116,15 +118,15 @@ function test_abstractcomponent_interface(::Type{T}) where {T<:AbstractComponent
             orig1 = c[e1]
             orig2 = c[e2]
 
-            orig_id1 = c.indices[e1.id]
-            orig_id2 = c.indices[e2.id]
+            orig_id1 = indices(c)[e1.id]
+            orig_id2 = indices(c)[e2.id]
 
             swap_order!(c, e1, e2)
             @test c[e2] == orig2
             @test c[e1] == orig1
 
-            @test c.indices[e2.id] == orig_id1
-            @test c.indices[e1.id] == orig_id2
+            @test indices(c)[e2.id] == orig_id1
+            @test indices(c)[e1.id] == orig_id2
 
             es = map(x->x.e, @entities_in(c))
             cur = c[es]

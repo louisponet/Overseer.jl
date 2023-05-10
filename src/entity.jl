@@ -59,7 +59,7 @@ end
 
 Entity(e::Entity) = e
 
-Base.@propagate_inbounds Entity(c::AbstractComponent, i::Int) = Entity(c.indices.packed[i])
+Base.@propagate_inbounds Entity(c::AbstractComponent, i::Int) = Entity(indices(c).packed[i])
 
 Base.iterate(e::Entity, state = 1) = state > 1 ? nothing : (e, state + 1)
 

@@ -41,7 +41,7 @@ Ledger() = Ledger(Entity[],
 function Ledger(comps::Dict{DataType, AbstractComponent})
     out = Ledger()
     out.components = comps
-    out.entities = Entity.(union(map(x->x.indices.packed, values(comps))...))
+    out.entities = Entity.(union(map(x->indices(x).packed, values(comps))...))
     return out 
 end
 
@@ -124,7 +124,7 @@ function Base.empty!(m::AbstractLedger)
     empty!(groups(m))
 end
 
-function Base.getindex(m::AbstractLedger, ::Type{T}) where {T}
+function Base.getindex(m::AbstractLedger, ::Type{T})::component_type(T) where {T}
     return get!(components(m), T, component_type(T)())
 end
 

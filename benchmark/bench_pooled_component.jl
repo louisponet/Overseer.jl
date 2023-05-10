@@ -1,21 +1,20 @@
-module BenchSharedComponent
+module BenchPooledComponent
     
 using BenchmarkTools
 import Random
 using Overseer
-using Parameters
 
-@shared_component @with_kw struct Spatial
+@pooled_component Base.@kwdef struct Spatial
     position::NTuple{3, Float64} = (1.0,1.0,1.0)
     velocity::NTuple{3, Float64} = (1.0,1.0,1.0)
 end
 
-@shared_component struct Spring
+@pooled_component struct Spring
     center::NTuple{3, Float64}
     spring_constant::Float64
 end
 
-@shared_component mutable struct Rotation
+@pooled_component mutable struct Rotation
     omega::Float64
     center::NTuple{3, Float64}
     axis::NTuple{3, Float64}
@@ -107,11 +106,11 @@ suite["basic"] = BenchmarkGroup()
 
 const ids = Entity.(unique(rand(1:1000, 1000)))
 
-suite["basic"]["insertion"] = @benchmarkable bench_insertion(c, $ids, $(Spatial((123.0, 1.2, 1.0), (0.4, 12.0, 234.9)))) setup=(c=SharedComponent{Spatial}()) evals=1
+suite["basic"]["insertion"] = @benchmarkable bench_insertion(c, $ids, $(Spatial((123.0, 1.2, 1.0), (0.4, 12.0, 234.9)))) setup=(c=PooledComponent{Spatial}()) evals=1
 
-suite["basic"]["access"] = @benchmarkable bench_access(c, $ids, 0.0) setup=(c = SharedComponent{Spatial}(); bench_insertion(c, $ids, Spatial((123.0, 1.2, 1.0), (0.4, 12.0, 234.9))))
+suite["basic"]["access"] = @benchmarkable bench_access(c, $ids, 0.0) setup=(c = PooledComponent{Spatial}(); bench_insertion(c, $ids, Spatial((123.0, 1.2, 1.0), (0.4, 12.0, 234.9))))
 
-const c_full = SharedComponent{Spatial}()
+const c_full = PooledComponent{Spatial}()
 bench_insertion(c_full, ids, Spatial((123.0, 1.2, 1.0), (0.4, 12.0, 234.9)))
 
 suite["basic"]["access inbounds"] = @benchmarkable bench_access_inbounds(c, $ids, 0.0) setup=(c = deepcopy(c_full))
@@ -178,4 +177,4 @@ suite["real life"]["update"]["new school full"] = @benchmarkable (update_new(Osc
                                                       update_new(Mover(), m)) setup=(m = Ledger(st); e_fill(m))
 
 end
-BenchSharedComponent.suite
+BenchPooledComponent.suite
