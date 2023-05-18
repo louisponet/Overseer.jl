@@ -133,7 +133,7 @@ Component{T}() where {T} = Component(Indices(), T[])
 @inline data(c::Component) = c.data
 
 Base.@propagate_inbounds @inline data_index(c::Component, i::Integer) = i
-Base.@propagate_inbounds @inline data_index(c::Component, e::AbstractEntity) = c.indices[e.id]
+Base.@propagate_inbounds @inline data_index(c::Component, e::AbstractEntity) = c.indices[Entity(e).id]
 
 @inline component(c::Component) = c
 
@@ -166,11 +166,12 @@ Base.@propagate_inbounds @inline function Base.pop!(c::Component, e::AbstractEnt
         throw(BoundsError(c, Entity(e)))
     end
     @inbounds begin
-        id = c.indices[e.id]
+        eid = Entity(e).id
+        id = c.indices[eid]
         v = c.data[id]
         c.data[id] = c.data[end]
         pop!(c.data)
-        pop!(c.indices, e.id)
+        pop!(c.indices, eid)
         return EntityState(Entity(e), v)
     end
 end
@@ -306,7 +307,7 @@ Base.@propagate_inbounds @inline Base.parent(c::PooledComponent, e::Entity) = pa
 # c[entity] = value
 # set value of <only> this entity
 Base.@propagate_inbounds @inline function Base.setindex!(c::PooledComponent{T}, v::T, e::AbstractEntity) where {T}
-    eid = e.id
+    eid = Entity(e).id
     @boundscheck if !in(e, c)
         push!(c.indices, eid)
         push!(c.pool, length(c.data) + 1)
@@ -338,6 +339,7 @@ end
         throw(BoundsError(c, Entity(p)))
     end
     @inbounds begin
+        eid = Entity(e).id
         pg = pool(c, p)
         if in(e, c)
             eg = pool(c, e)
@@ -353,10 +355,10 @@ end
                 c.pool_size[eg] -= 1
             end
             # adjust pool index either way
-            c.pool[c.indices[e.id]] = pg
+            c.pool[c.indices[eid]] = pg
         else
             # if the entity is not in there we have to add it
-            push!(c.indices, e.id)
+            push!(c.indices, eid)
             push!(c.pool, pg)
         end
         c.pool_size[pg] += 1
@@ -372,7 +374,7 @@ end
     @boundscheck if !in(e, c)
         throw(BoundsError(c, Entity(e)))
     end
-    @inbounds c.data[pool(c, e.id)] = v
+    @inbounds c.data[pool(c, Entity(e).id)] = v
     return v
 end
 
@@ -403,18 +405,20 @@ function Base.pop!(c::PooledComponent, e::AbstractEntity)
     end
 
     @inbounds begin
-        id = c.indices[e.id]
+        ee = Entity(e)
+        eid = ee.id
+        id = c.indices[eid]
         g = c.pool[id]
 
         c.pool[id] = c.pool[end]
         c.pool_size[g] -= 1
         pop!(c.pool)
-        pop!(c.indices, e.id)
+        pop!(c.indices, eid)
 
         val = c.data[g]
         maybe_cleanup_empty_pool!(c, g)
 
-        return EntityState(Entity(e), val)
+        return EntityState(ee, val)
     end
 end
 
@@ -517,7 +521,8 @@ function swap_order!(c::PooledComponent, e1::AbstractEntity, e2::AbstractEntity)
         throw(BoundsError(c, Entity(e2)))
     end
     @inbounds begin
-        id1, id2 = swap_order!(indices(c), e1.id, e2.id)
+        eid1, eid2 = Entity(e1).id, Entity(e2).id
+        id1, id2 = swap_order!(indices(c), eid1, eid2)
         edata = c.pool
         edata[id1], edata[id2] = edata[id2], edata[id1]
     end
