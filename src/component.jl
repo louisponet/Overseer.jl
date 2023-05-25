@@ -49,7 +49,7 @@ Base.@propagate_inbounds function Base.getindex(c::AbstractComponent,
 end
 
 Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent{T}, v::T, i::Integer) where {T} = data(c)[data_index(c, i)] = v
-Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent{T}, v::T, e::AbstractEntity) where {T} =
+Base.@propagate_inbounds @inline Base.setindex!(c::AbstractComponent, v, e::AbstractEntity) where {T} =
     setindex!(component(c), v, e)
 
 function Base.permute!(c::AbstractComponent, permvec::AbstractVector{<:Integer})
